@@ -3,9 +3,18 @@ import matplotlib.patches as patches
 import numpy as np
 import streamlit as st
 
-st.set_page_config(page_title="Mô phỏng đỗ xe", layout="centered")
+# Mở rộng toàn trang
+st.set_page_config(layout="wide")
 
-# 1. KHỞI TẠO BỘ NHỚ TRẠNG THÁI (Session State)
+# CSS: Xóa khoảng trắng thừa và ẩn logo Streamlit cho giống App Native
+st.markdown("""
+    <style>
+           .block-container { padding-top: 1rem; padding-bottom: 0rem; }
+           header { visibility: hidden; }
+           footer { visibility: hidden; }
+    </style>
+    """, unsafe_allow_html=True)
+
 if 'state' not in st.session_state:
     st.session_state.state = {'x': 0, 'y': 0, 'dx': 1, 'dy': 0}
 
@@ -29,17 +38,14 @@ def draw_car(ax, x, y, dx, dy, color_body, color_window):
     rear_window = patches.Rectangle((x - 0.35, y - 0.15), 0.1, 0.3, color=color_window, zorder=6)
     light1 = patches.Circle((x + 0.38, y - 0.15), 0.05, color='yellow', zorder=6)
     light2 = patches.Circle((x + 0.38, y + 0.15), 0.05, color='yellow', zorder=6)
-
     transform = plt.matplotlib.transforms.Affine2D().rotate_deg_around(x, y, angle) + ax.transData
     for patch in [car_body, windshield, rear_window, light1, light2]:
         patch.set_transform(transform)
         ax.add_patch(patch)
 
-# 2. XỬ LÝ NÚT BẤM
 def move_car(action):
     x, y, dx, dy = st.session_state.state['x'], st.session_state.state['y'], st.session_state.state['dx'], st.session_state.state['dy']
     dir_idx = dirs.index((dx, dy))
-
     if action == 'up':
         nx, ny = x + dx, y + dy
         if 0 <= nx < 6 and 0 <= ny < 6 and grid[ny, nx] != 1:
@@ -53,46 +59,53 @@ def move_car(action):
     elif action == 'right':
         st.session_state.state['dx'], st.session_state.state['dy'] = dirs[(dir_idx + 1) % 4]
 
-# 3. GIAO DIỆN NÚT BẤM
-st.title("🎮 Điều khiển xe tự hành")
+# --- CHIA BỐ CỤC NGANG 16:9 ---
+col_map, col_controls = st.columns([2, 1])
 
-col1, col2, col3 = st.columns([1, 1, 1])
-with col2:
-    if st.button("Tiến ⬆️", use_container_width=True): move_car('up')
-col4, col5, col6 = st.columns([1, 1, 1])
-with col4:
-    if st.button("Rẽ Trái ↩️", use_container_width=True): move_car('left')
-with col5:
-    if st.button("Lùi ⬇️", use_container_width=True): move_car('down')
-with col6:
-    if st.button("Rẽ Phải ↪️", use_container_width=True): move_car('right')
+# Bên trái: Bản đồ
+with col_map:
+    fig, ax = plt.subplots(figsize=(5.5, 5.5)) 
+    ax.set_facecolor('#0E1621') # Đổi màu nền cho tiệp với slide xanh đen
+    ax.set_xlim(-0.5, 5.5)
+    ax.set_ylim(5.5, -0.5)
 
-# 4. VẼ BẢN ĐỒ
-fig, ax = plt.subplots(figsize=(5, 5))
-ax.set_facecolor('#404040')
-ax.set_xlim(-0.5, 5.5)
-ax.set_ylim(5.5, -0.5)
+    for i in range(6):
+        for j in range(6):
+            ax.add_patch(patches.Rectangle((i-0.45, j-0.45), 0.9, 0.9, fill=False, ec='#ffffff', lw=1.5, ls='--', alpha=0.2))
 
-for i in range(6):
-    for j in range(6):
-        ax.add_patch(patches.Rectangle((i-0.45, j-0.45), 0.9, 0.9, fill=False, ec='#ffffff', lw=1.5, ls='--', alpha=0.3))
+    goal_box = patches.Rectangle((4.5, 4.5), 1, 1, facecolor='#1a5276', ec='#3498db', lw=3, zorder=2)
+    ax.add_patch(goal_box)
+    ax.text(5, 5, 'P', color='white', fontsize=24, fontweight='bold', ha='center', va='center', zorder=3)
 
-goal_box = patches.Rectangle((4.5, 4.5), 1, 1, facecolor='#1a5276', ec='#3498db', lw=3, zorder=2)
-ax.add_patch(goal_box)
-ax.text(5, 5, 'P', color='white', fontsize=24, fontweight='bold', ha='center', va='center', zorder=3)
+    for r in range(6):
+        for c in range(6):
+            if grid[r, c] == 1:
+                draw_car(ax, c, r, 1, 0, color_body='#E74C3C', color_window='#1a1a1a') # Xe đỏ nổi hơn
 
-for r in range(6):
-    for c in range(6):
-        if grid[r, c] == 1:
-            draw_car(ax, c, r, 1, 0, color_body='#800000', color_window='#1a1a1a')
+    draw_car(ax, st.session_state.state['x'], st.session_state.state['y'], st.session_state.state['dx'], st.session_state.state['dy'], color_body='#ffffff', color_window='#333333')
 
-draw_car(ax, st.session_state.state['x'], st.session_state.state['y'], st.session_state.state['dx'], st.session_state.state['dy'], color_body='#ffffff', color_window='#333333')
+    ax.set_xticks(np.arange(0, 6, 1))
+    ax.set_yticks(np.arange(0, 6, 1))
+    ax.xaxis.tick_top()
+    st.pyplot(fig)
 
-ax.set_xticks(np.arange(0, 6, 1))
-ax.set_yticks(np.arange(0, 6, 1))
-ax.xaxis.tick_top()
+# Bên phải: Nút bấm
+with col_controls:
+    st.markdown("<br><br>", unsafe_allow_html=True) # Đẩy chữ xuống giữa
+    if st.session_state.state['x'] == 5 and st.session_state.state['y'] == 5:
+        st.success("🎉 ĐỖ XE THÀNH CÔNG!")
+    else:
+        st.markdown("<h3 style='text-align: center; color: white;'>🕹️ BẢNG ĐIỀU KHIỂN</h3>", unsafe_allow_html=True)
 
-if st.session_state.state['x'] == 5 and st.session_state.state['y'] == 5:
-    st.success("🎉 BẠN ĐÃ ĐỖ XE THÀNH CÔNG! 🎉")
-
-st.pyplot(fig)
+    # Layout nút hình chữ thập (D-pad)
+    c1, c2, c3 = st.columns([1, 1.5, 1])
+    with c2:
+        if st.button("Tiến ⬆️", use_container_width=True): move_car('up')
+    
+    c4, c5, c6 = st.columns([1.5, 1.2, 1.5])
+    with c4:
+        if st.button("Trái ↩️", use_container_width=True): move_car('left')
+    with c5:
+        if st.button("Lùi ⬇️", use_container_width=True): move_car('down')
+    with c6:
+        if st.button("Phải ↪️", use_container_width=True): move_car('right')
