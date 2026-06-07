@@ -83,7 +83,7 @@ def solve_astar_with_vis():
             
     return [], exploration_order
 
-# --- 5. RENDER SÂN ĐỖ CHUYÊN NGHIỆP CÓ KHUNG TRẮNG (CĂN CHỈNH SANG PHẢI ĐỂ CÂN BẰNG) ---
+# --- 5. RENDER SÂN ĐỖ CHUYÊN NGHIỆP CÓ KHUNG TRẮNG (ĐÃ ÉP SÁT LỀ TRÁI) ---
 def render_grid():
     html = """
     <style>
@@ -91,6 +91,8 @@ def render_grid():
             background-color: transparent;
             margin: 0;
             padding: 0;
+            display: flex;
+            justify-content: flex-start; /* Ép toàn bộ phần tử con sát lề trái */
         }
         .grid-container {
             display: flex;
@@ -101,8 +103,7 @@ def render_grid():
             border: 3px solid #ffffff; 
             box-shadow: 0 8px 24px rgba(255,255,255,0.15);
             width: fit-content;
-            /* Thay đổi từ margin: auto sang margin-left: auto để đẩy bãi đỗ sát về phía cột trạng thái */
-            margin: 0 0 0 auto; 
+            margin: 0 !important; /* Xóa bỏ margin tự động để chống thụt lề */
         }
         .grid-table { 
             border-collapse: separate; 
@@ -219,8 +220,8 @@ def render_grid():
 st.title("⚙️ HỆ THỐNG GIÁM SÁT & ĐỊNH TỰ ĐỘNG AGV")
 st.markdown("---")
 
-# ĐÃ SỬA: Thay đổi tỷ lệ cột từ [11, 8] thành [5, 4] để phân bổ không gian cân đối, không ép lề cột phải
-col1, col2 = st.columns([5, 4], gap="large")
+# ĐÃ SỬA: Thay đổi tỷ lệ thành [4, 3] và dùng gap="small" giúp giao diện gọn, ép đều hai lề lân cận
+col1, col2 = st.columns([4, 3], gap="small")
 
 with col1:
     st.subheader("Bản Đồ Số Lưới Không Gian")
