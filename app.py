@@ -83,18 +83,20 @@ def solve_astar_with_vis():
             
     return [], exploration_order
 
-# --- 5. RENDER SÂN ĐỖ DARK TEAL MODE CHỐNG ZOOM ---
+# --- 5. RENDER SÂN ĐỖ NÂNG CẤP ĐÈN PHÁT SÁNG & KHUNG TRẮNG ---
 def render_grid():
     html = """
     <style>
         .grid-container {
             display: flex;
             justify-content: center;
-            background-color: #12181b; /* Nền tối sâu tổng thể bãi đỗ */
+            background-color: #12181b; 
             padding: 20px;
             border-radius: 14px;
+            /* Khung viền màu trắng bao bọc ngoài bãi đỗ xe tạo sự khác biệt rõ rệt */
+            border: 3px solid #ffffff; 
+            box-shadow: 0 8px 24px rgba(255,255,255,0.1);
         }
-        /* Khóa cứng kích thước bảng chống rung lắc, giật màn hình khi xe di chuyển */
         .grid-table { 
             border-collapse: separate; 
             border-spacing: 6px; 
@@ -109,51 +111,50 @@ def render_grid():
             text-align: center; 
             vertical-align: middle;
             font-family: 'Segoe UI', sans-serif;
-            font-size: 11px; 
+            font-size: 12px; 
             font-weight: bold; 
             border-radius: 8px;
             position: relative; 
-            /* Ô đỗ trống màu xanh Teal sẫm dịu mát */
             background-color: #1e252b; 
             border: 1px dashed #34414c;
             overflow: hidden;
         }
-        /* Chướng ngại vật phẳng, dịu mắt theo style thiết kế */
+        /* Vật cản phẳng tối */
         .cell-obstacle {
             background-color: #3d4d59 !important;
             border: 1px solid #4f616f !important;
         }
-        /* Vị trí xuất phát */
+        /* Điểm xuất phát */
         .cell-start {
             background-color: #0d3b32 !important;
             color: #00b894 !important;
             border: 1px solid #00b894 !important;
         }
-        /* Vị trí ô đích đỗ xe */
+        /* Điểm đích đến */
         .cell-goal {
             background-color: #4c1c24 !important;
             color: #ff7675 !important;
             border: 1px solid #ff7675 !important;
         }
-        /* Các ô radar đang được thuật toán rà quét (Màu cyan mờ) */
+        /* AI quét đa hướng tìm đường (Màu cyan mờ ảo) */
         .cell-explored {
             background-color: #103136 !important;
             border: 1px dashed #00cec9 !important;
         }
-        /* Đường đi chốt cuối cùng */
+        /* ĐƯỜNG ĐI AUTO ĐƯỢC HIGHLIGHT SIÊU RÕ NÉT VỚI HIỆU ỨNG PHÁT SÁNG NGỌC CAO CẤP */
         .cell-path {
-            background-color: #093d39 !important;
-            border: 1px solid #00b894 !important;
+            background-color: #00b894 !important;
+            border: 1px solid #55efc4 !important;
+            box-shadow: inset 0 0 15px rgba(85, 239, 196, 0.6) !important;
         }
         .path-dot {
-            width: 10px;
-            height: 10px;
-            background-color: #00b894;
+            width: 14px;
+            height: 14px;
+            background-color: #ffffff;
             border-radius: 50%;
             margin: auto;
-            box-shadow: 0 0 10px #00b894;
+            box-shadow: 0 0 12px #ffffff;
         }
-        /* Khung bọc xe */
         .car-wrapper {
             width: 100%;
             height: 100%;
@@ -163,6 +164,7 @@ def render_grid():
             position: absolute;
             top: 0;
             left: 0;
+            z-index: 10;
         }
     </style>
     <div class='grid-container'>
@@ -188,17 +190,19 @@ def render_grid():
             elif (r, c) in st.session_state.explored_cells:
                 cell_class += " cell-explored"
             
-            # Đè xe AGV lên ô hiện tại (Tone màu xanh dương thương mại kết hợp đèn định vị LED)
+            # Đè mô hình AGV lên ô hiện tại + Cấu hình hệ thống đèn LED Neon phát sáng cực đại
             if r == st.session_state.car_r and c == st.session_state.car_c:
                 angle = DIR_ROTATION[st.session_state.car_d]
                 content = f"""
                 <div class='car-wrapper'>
-                    <svg width="44" height="44" viewBox="0 0 24 24" style="transform: rotate({angle}deg); overflow: visible;">
-                        <rect x="5" y="3" width="14" height="18" rx="4" fill="#0984e3" stroke="#74b9ff" stroke-width="1"/>
-                        <path d="M7 8 C 7 6, 17 6, 17 8 L16 11 L8 11 Z" fill="#dfe6e9" opacity="0.8"/>
-                        <rect x="8" y="15" width="8" height="2" rx="0.5" fill="#ffffff" opacity="0.3"/>
-                        <circle cx="8" cy="4.5" r="0.8" fill="#55efc4"/>
-                        <circle cx="16" cy="4.5" r="0.8" fill="#55efc4"/>
+                    <svg width="46" height="46" viewBox="0 0 24 24" style="transform: rotate({angle}deg); overflow: visible;">
+                        <rect x="5" y="3" width="14" height="18" rx="4" fill="#0984e3" stroke="#74b9ff" stroke-width="1.2"/>
+                        <path d="M7 8 C 7 6, 17 6, 17 8 L16 11 L8 11 Z" fill="#dfe6e9" opacity="0.85"/>
+                        <rect x="8" y="15" width="8" height="1.5" rx="0.5" fill="#ff7675" opacity="0.6"/>
+                        
+                        <circle cx="8" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -2px 5px #55efc4)"/>
+                        <circle cx="16" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -2px 5px #55efc4)"/>
+                        
                         <rect x="3" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
                         <rect x="19" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
                         <rect x="3" y="15" width="2" height="4" rx="1" fill="#1e272e"/>
@@ -238,17 +242,20 @@ with col2:
         
         path, exploration_order = solve_astar_with_vis()
         
+        # PHA 1: AI chạy đủ hướng để tìm (Hiển thị các ô đã quét qua)
         for cell in exploration_order:
-            time.sleep(0.06)
+            time.sleep(0.05)
             st.session_state.explored_cells.add(cell)
             grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
             
+        # PHA 2: Chốt đường đi chính xác và Highlight phát sáng rực rỡ
         st.session_state.mode = "PATH LOCKED"
         for node in path:
             st.session_state.final_path_cells.add((node[0], node[1]))
         grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
         time.sleep(0.6)
         
+        # PHA 3: Cho xe chạy tịnh tiến theo lộ trình
         st.session_state.mode = "AGV MOVING"
         current_g = 0
         for idx in range(1, len(path)):
