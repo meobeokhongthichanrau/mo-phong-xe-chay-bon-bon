@@ -43,13 +43,13 @@ if "car_r" not in st.session_state:
     st.session_state.explored_cells = set()
     st.session_state.final_path_cells = set()
 
-# --- 4. THUẬT TOÁN A* LÕI (ĐÃ SỬA LỖI UNPACK TỌA ĐỘ) ---
+# --- 4. THUẬT TOÁN A* LÕI ---
 def heuristic(r, c, g_r, g_c):
     return (abs(r - g_r) + abs(c - g_c)) * COST_FORWARD
 
 def solve_astar_with_vis():
     start_r, start_c, start_d = START_POS
-    r_goal, c_goal = GOAL_POS  # Đã sửa từ g_goal, r_goal thành r_goal, c_goal
+    r_goal, c_goal = GOAL_POS
     
     pq = [(heuristic(start_r, start_c, r_goal, c_goal), 0, start_r, start_c, start_d, [(start_r, start_c, start_d)])]
     visited = set()
@@ -83,7 +83,7 @@ def solve_astar_with_vis():
             
     return [], exploration_order
 
-# --- 5. RENDER SÂN ĐỖ CHUYÊN NGHIỆP CÓ KHUNG TRẮNG ---
+# --- 5. RENDER SÂN ĐỖ CHUYÊN NGHIỆP CÓ KHUNG TRẮNG (CĂN CHỈNH SANG PHẢI ĐỂ CÂN BẰNG) ---
 def render_grid():
     html = """
     <style>
@@ -101,7 +101,8 @@ def render_grid():
             border: 3px solid #ffffff; 
             box-shadow: 0 8px 24px rgba(255,255,255,0.15);
             width: fit-content;
-            margin: auto;
+            /* Thay đổi từ margin: auto sang margin-left: auto để đẩy bãi đỗ sát về phía cột trạng thái */
+            margin: 0 0 0 auto; 
         }
         .grid-table { 
             border-collapse: separate; 
@@ -218,7 +219,8 @@ def render_grid():
 st.title("⚙️ HỆ THỐNG GIÁM SÁT & ĐỊNH TỰ ĐỘNG AGV")
 st.markdown("---")
 
-col1, col2 = st.columns([11, 8])
+# ĐÃ SỬA: Thay đổi tỷ lệ cột từ [11, 8] thành [5, 4] để phân bổ không gian cân đối, không ép lề cột phải
+col1, col2 = st.columns([5, 4], gap="large")
 
 with col1:
     st.subheader("Bản Đồ Số Lưới Không Gian")
