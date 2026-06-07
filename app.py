@@ -83,7 +83,7 @@ def solve_astar_with_vis():
             
     return [], exploration_order
 
-# --- 5. RENDER SÂN ĐỖ NÂNG CẤP ĐÈN PHÁT SÁNG & KHUNG TRẮNG ---
+# --- 5. RENDER SÂN ĐỖ CHUYÊN NGHIỆP CÓ KHUNG TRẮNG ---
 def render_grid():
     html = """
     <style>
@@ -93,9 +93,9 @@ def render_grid():
             background-color: #12181b; 
             padding: 20px;
             border-radius: 14px;
-            /* Khung viền màu trắng bao bọc ngoài bãi đỗ xe tạo sự khác biệt rõ rệt */
+            /* Khung viền ngoài màu trắng làm nổi bật bãi đỗ xe */
             border: 3px solid #ffffff; 
-            box-shadow: 0 8px 24px rgba(255,255,255,0.1);
+            box-shadow: 0 8px 24px rgba(255,255,255,0.15);
         }
         .grid-table { 
             border-collapse: separate; 
@@ -119,7 +119,7 @@ def render_grid():
             border: 1px dashed #34414c;
             overflow: hidden;
         }
-        /* Vật cản phẳng tối */
+        /* Vật cản phẳng tối mờ dịu mắt */
         .cell-obstacle {
             background-color: #3d4d59 !important;
             border: 1px solid #4f616f !important;
@@ -136,7 +136,7 @@ def render_grid():
             color: #ff7675 !important;
             border: 1px solid #ff7675 !important;
         }
-        /* AI quét đa hướng tìm đường (Màu cyan mờ ảo) */
+        /* AI duyệt quét mọi hướng tìm đường (màu xanh cyan nhẹ) */
         .cell-explored {
             background-color: #103136 !important;
             border: 1px dashed #00cec9 !important;
@@ -145,7 +145,7 @@ def render_grid():
         .cell-path {
             background-color: #00b894 !important;
             border: 1px solid #55efc4 !important;
-            box-shadow: inset 0 0 15px rgba(85, 239, 196, 0.6) !important;
+            box-shadow: inset 0 0 15px rgba(85, 239, 196, 0.7) !important;
         }
         .path-dot {
             width: 14px;
@@ -190,7 +190,7 @@ def render_grid():
             elif (r, c) in st.session_state.explored_cells:
                 cell_class += " cell-explored"
             
-            # Đè mô hình AGV lên ô hiện tại + Cấu hình hệ thống đèn LED Neon phát sáng cực đại
+            # Đè mô hình xe AGV + Đèn LED Neon phát sáng rực rỡ định hướng đầu xe
             if r == st.session_state.car_r and c == st.session_state.car_c:
                 angle = DIR_ROTATION[st.session_state.car_d]
                 content = f"""
@@ -200,8 +200,8 @@ def render_grid():
                         <path d="M7 8 C 7 6, 17 6, 17 8 L16 11 L8 11 Z" fill="#dfe6e9" opacity="0.85"/>
                         <rect x="8" y="15" width="8" height="1.5" rx="0.5" fill="#ff7675" opacity="0.6"/>
                         
-                        <circle cx="8" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -2px 5px #55efc4)"/>
-                        <circle cx="16" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -2px 5px #55efc4)"/>
+                        <circle cx="8" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -3px 6px #55efc4) drop-shadow(0px -1px 2px #ffffff)"/>
+                        <circle cx="16" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -3px 6px #55efc4) drop-shadow(0px -1px 2px #ffffff)"/>
                         
                         <rect x="3" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
                         <rect x="19" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
@@ -235,27 +235,27 @@ with col2:
     st.write("---")
     c_btn1, c_btn2 = st.columns(2)
     
-    if c_btn1.button("🤖 KÍCH HOẠT AUTO A*"):
+    if c_btn1.button("🤖 KÍCH HOẠTRA AUTO A*"):
         st.session_state.mode = "AI SEARCHING..."
         st.session_state.explored_cells = set()
         st.session_state.final_path_cells = set()
         
         path, exploration_order = solve_astar_with_vis()
         
-        # PHA 1: AI chạy đủ hướng để tìm (Hiển thị các ô đã quét qua)
+        # PHA 1: AI thám thính và chạy rà quét đủ hướng
         for cell in exploration_order:
             time.sleep(0.05)
             st.session_state.explored_cells.add(cell)
             grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
             
-        # PHA 2: Chốt đường đi chính xác và Highlight phát sáng rực rỡ
+        # PHA 2: Tìm thấy đường đi chính xác -> Highlight sáng rực rỡ
         st.session_state.mode = "PATH LOCKED"
         for node in path:
             st.session_state.final_path_cells.add((node[0], node[1]))
         grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
         time.sleep(0.6)
         
-        # PHA 3: Cho xe chạy tịnh tiến theo lộ trình
+        # PHA 3: Cho xe di chuyển tịnh tiến
         st.session_state.mode = "AGV MOVING"
         current_g = 0
         for idx in range(1, len(path)):
