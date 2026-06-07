@@ -43,15 +43,15 @@ if "car_r" not in st.session_state:
     st.session_state.explored_cells = set()
     st.session_state.final_path_cells = set()
 
-# --- 4. THUẬT TOÁN A* LÕI ---
+# --- 4. THUẬT TOÁN A* LÕI (ĐÃ SỬA LỖI UNPACK TỌA ĐỘ) ---
 def heuristic(r, c, g_r, g_c):
     return (abs(r - g_r) + abs(c - g_c)) * COST_FORWARD
 
 def solve_astar_with_vis():
     start_r, start_c, start_d = START_POS
-    g_goal, r_goal = GOAL_POS
+    r_goal, c_goal = GOAL_POS  # Đã sửa từ g_goal, r_goal thành r_goal, c_goal
     
-    pq = [(heuristic(start_r, start_c, g_goal, r_goal), 0, start_r, start_c, start_d, [(start_r, start_c, start_d)])]
+    pq = [(heuristic(start_r, start_c, r_goal, c_goal), 0, start_r, start_c, start_d, [(start_r, start_c, start_d)])]
     visited = set()
     exploration_order = []
     
@@ -70,16 +70,16 @@ def solve_astar_with_vis():
         dr, dc = DIRS[d]
         nr, nc = r + dr, c + dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-            heapq.heappush(pq, (g + COST_FORWARD + heuristic(nr, nc, g_goal, r_goal), g + COST_FORWARD, nr, nc, d, path + [(nr, nc, d)]))
+            heapq.heappush(pq, (g + COST_FORWARD + heuristic(nr, nc, r_goal, c_goal), g + COST_FORWARD, nr, nc, d, path + [(nr, nc, d)]))
             
         # Lùi
         nr, nc = r - dr, c - dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-            heapq.heappush(pq, (g + COST_BACKWARD + heuristic(nr, nc, g_goal, r_goal), g + COST_BACKWARD, nr, nc, d, path + [(nr, nc, d)]))
+            heapq.heappush(pq, (g + COST_BACKWARD + heuristic(nr, nc, r_goal, c_goal), g + COST_BACKWARD, nr, nc, d, path + [(nr, nc, d)]))
             
         # Rẽ
         for next_d in [(d - 1) % 4, (d + 1) % 4]:
-            heapq.heappush(pq, (g + COST_TURN + heuristic(r, c, g_goal, r_goal), g + COST_TURN, r, c, next_d, path + [(r, c, next_d)]))
+            heapq.heappush(pq, (g + COST_TURN + heuristic(r, c, r_goal, c_goal), g + COST_TURN, r, c, next_d, path + [(r, c, next_d)]))
             
     return [], exploration_order
 
@@ -87,61 +87,63 @@ def solve_astar_with_vis():
 def render_grid():
     html = """
     <style>
+        body {
+            background-color: transparent;
+            margin: 0;
+            padding: 0;
+        }
         .grid-container {
             display: flex;
             justify-content: center;
             background-color: #12181b; 
-            padding: 20px;
+            padding: 15px;
             border-radius: 14px;
-            /* Khung viền ngoài màu trắng làm nổi bật bãi đỗ xe */
             border: 3px solid #ffffff; 
             box-shadow: 0 8px 24px rgba(255,255,255,0.15);
+            width: fit-content;
+            margin: auto;
         }
         .grid-table { 
             border-collapse: separate; 
             border-spacing: 6px; 
             table-layout: fixed; 
-            width: 420px; 
-            height: 420px; 
+            width: 400px; 
+            height: 400px; 
         }
         .grid-cell { 
-            width: 62px !important; 
-            height: 62px !important; 
+            width: 60px !important; 
+            height: 60px !important; 
             box-sizing: border-box;
             text-align: center; 
             vertical-align: middle;
             font-family: 'Segoe UI', sans-serif;
-            font-size: 12px; 
+            font-size: 14px; 
             font-weight: bold; 
             border-radius: 8px;
             position: relative; 
             background-color: #1e252b; 
             border: 1px dashed #34414c;
             overflow: hidden;
+            color: #ffffff;
         }
-        /* Vật cản phẳng tối mờ dịu mắt */
         .cell-obstacle {
             background-color: #3d4d59 !important;
             border: 1px solid #4f616f !important;
         }
-        /* Điểm xuất phát */
         .cell-start {
             background-color: #0d3b32 !important;
             color: #00b894 !important;
             border: 1px solid #00b894 !important;
         }
-        /* Điểm đích đến */
         .cell-goal {
             background-color: #4c1c24 !important;
             color: #ff7675 !important;
             border: 1px solid #ff7675 !important;
         }
-        /* AI duyệt quét mọi hướng tìm đường (màu xanh cyan nhẹ) */
         .cell-explored {
             background-color: #103136 !important;
             border: 1px dashed #00cec9 !important;
         }
-        /* ĐƯỜNG ĐI AUTO ĐƯỢC HIGHLIGHT SIÊU RÕ NÉT VỚI HIỆU ỨNG PHÁT SÁNG NGỌC CAO CẤP */
         .cell-path {
             background-color: #00b894 !important;
             border: 1px solid #55efc4 !important;
@@ -190,19 +192,16 @@ def render_grid():
             elif (r, c) in st.session_state.explored_cells:
                 cell_class += " cell-explored"
             
-            # Đè mô hình xe AGV + Đèn LED Neon phát sáng rực rỡ định hướng đầu xe
             if r == st.session_state.car_r and c == st.session_state.car_c:
                 angle = DIR_ROTATION[st.session_state.car_d]
                 content = f"""
                 <div class='car-wrapper'>
-                    <svg width="46" height="46" viewBox="0 0 24 24" style="transform: rotate({angle}deg); overflow: visible;">
+                    <svg width="44" height="44" viewBox="0 0 24 24" style="transform: rotate({angle}deg); overflow: visible;">
                         <rect x="5" y="3" width="14" height="18" rx="4" fill="#0984e3" stroke="#74b9ff" stroke-width="1.2"/>
                         <path d="M7 8 C 7 6, 17 6, 17 8 L16 11 L8 11 Z" fill="#dfe6e9" opacity="0.85"/>
                         <rect x="8" y="15" width="8" height="1.5" rx="0.5" fill="#ff7675" opacity="0.6"/>
-                        
-                        <circle cx="8" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -3px 6px #55efc4) drop-shadow(0px -1px 2px #ffffff)"/>
-                        <circle cx="16" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -3px 6px #55efc4) drop-shadow(0px -1px 2px #ffffff)"/>
-                        
+                        <circle cx="8" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -3px 6px #55efc4)"/>
+                        <circle cx="16" cy="3.5" r="1.5" fill="#55efc4" filter="drop-shadow(0px -3px 6px #55efc4)"/>
                         <rect x="3" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
                         <rect x="19" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
                         <rect x="3" y="15" width="2" height="4" rx="1" fill="#1e272e"/>
@@ -224,7 +223,8 @@ col1, col2 = st.columns([11, 8])
 with col1:
     st.subheader("Bản Đồ Số Lưới Không Gian")
     grid_placeholder = st.empty()
-    grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
+    with grid_placeholder:
+        st.components.v1.html(render_grid(), height=460, scrolling=False)
 
 with col2:
     st.subheader("Trạng Thái Hệ Thống")
@@ -235,31 +235,33 @@ with col2:
     st.write("---")
     c_btn1, c_btn2 = st.columns(2)
     
-    if c_btn1.button("🤖 KÍCH HOẠTRA AUTO A*"):
+    if c_btn1.button("🤖 KÍCH HOẠT AUTO A*"):
         st.session_state.mode = "AI SEARCHING..."
         st.session_state.explored_cells = set()
         st.session_state.final_path_cells = set()
         
         path, exploration_order = solve_astar_with_vis()
         
-        # PHA 1: AI thám thính và chạy rà quét đủ hướng
+        # PHA 1: AI quét thám thính bãi đỗ
         for cell in exploration_order:
-            time.sleep(0.05)
+            time.sleep(0.03)
             st.session_state.explored_cells.add(cell)
-            grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
-            
-        # PHA 2: Tìm thấy đường đi chính xác -> Highlight sáng rực rỡ
+            with grid_placeholder:
+                st.components.v1.html(render_grid(), height=460, scrolling=False)
+                
+        # PHA 2: Chốt đường đi tối ưu
         st.session_state.mode = "PATH LOCKED"
         for node in path:
             st.session_state.final_path_cells.add((node[0], node[1]))
-        grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
+        with grid_placeholder:
+            st.components.v1.html(render_grid(), height=460, scrolling=False)
         time.sleep(0.6)
         
-        # PHA 3: Cho xe di chuyển tịnh tiến
+        # PHA 3: Cho xe di chuyển thực tế
         st.session_state.mode = "AGV MOVING"
         current_g = 0
         for idx in range(1, len(path)):
-            time.sleep(0.35)
+            time.sleep(0.3)
             prev_r, prev_c, prev_d = path[idx-1]
             r, c, d = path[idx]
             
@@ -276,9 +278,12 @@ with col2:
             st.session_state.car_c = c
             st.session_state.car_d = d
             st.session_state.cost = current_g
-            grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
+            with grid_placeholder:
+                st.components.v1.html(render_grid(), height=460, scrolling=False)
             
+        st.session_state.mode = "FINISHED"
         st.success("AGV đã cập bến đỗ an toàn!")
+        rerun_page()
 
     if c_btn2.button("🔄 RESET MÔ PHỎNG"):
         st.session_state.car_r = START_POS[0]
