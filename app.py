@@ -83,79 +83,77 @@ def solve_astar_with_vis():
             
     return [], exploration_order
 
-# --- 5. RENDER SÂN ĐỖ CAO CẤP CHỐNG ZOOM GIẬT ---
+# --- 5. RENDER SÂN ĐỖ DARK TEAL MODE CHỐNG ZOOM ---
 def render_grid():
     html = """
     <style>
         .grid-container {
             display: flex;
             justify-content: center;
-            background-color: #263238; /* Nền sàn hầm tối hiện đại */
+            background-color: #12181b; /* Nền tối sâu tổng thể bãi đỗ */
             padding: 20px;
-            border-radius: 12px;
+            border-radius: 14px;
         }
-        /* Khóa cứng bố cục bảng, chống giãn dòng, giãn ô khi phần tử chuyển động */
+        /* Khóa cứng kích thước bảng chống rung lắc, giật màn hình khi xe di chuyển */
         .grid-table { 
             border-collapse: separate; 
             border-spacing: 6px; 
             table-layout: fixed; 
-            width: 430px; 
-            height: 430px; 
+            width: 420px; 
+            height: 420px; 
         }
         .grid-cell { 
-            width: 65px !important; 
-            height: 65px !important; 
+            width: 62px !important; 
+            height: 62px !important; 
             box-sizing: border-box;
             text-align: center; 
             vertical-align: middle;
             font-family: 'Segoe UI', sans-serif;
-            font-size: 13px; 
+            font-size: 11px; 
             font-weight: bold; 
-            border-radius: 6px;
+            border-radius: 8px;
             position: relative; 
-            /* Thiết kế ô đỗ xe tiêu chuẩn vạch đứt */
-            background-color: #cfd8dc; 
-            border: 2px dashed #ffffff;
+            /* Ô đỗ trống màu xanh Teal sẫm dịu mát */
+            background-color: #1e252b; 
+            border: 1px dashed #34414c;
             overflow: hidden;
         }
-        /* Chướng ngại vật: Khối bê tông dải phản quang vàng đen chuyên nghiệp */
+        /* Chướng ngại vật phẳng, dịu mắt theo style thiết kế */
         .cell-obstacle {
-            background-color: #37474f !important;
-            border: 2px solid #1c2833 !important;
-            background-image: linear-gradient(135deg, #f1c40f 25%, transparent 25%, transparent 50%, #f1c40f 50%, #f1c40f 75%, transparent 75%, transparent) !important;
-            background-size: 20px 20px !important;
-            opacity: 0.85;
+            background-color: #3d4d59 !important;
+            border: 1px solid #4f616f !important;
         }
         /* Vị trí xuất phát */
         .cell-start {
-            background-color: #2ecc71 !important;
-            color: white !important;
-            border: 2px solid #27ae60 !important;
+            background-color: #0d3b32 !important;
+            color: #00b894 !important;
+            border: 1px solid #00b894 !important;
         }
         /* Vị trí ô đích đỗ xe */
         .cell-goal {
-            background-color: #e74c3c !important;
-            color: white !important;
-            border: 2px solid #c0392b !important;
+            background-color: #4c1c24 !important;
+            color: #ff7675 !important;
+            border: 1px solid #ff7675 !important;
         }
-        /* Các ô đang quét tìm đường (Màu radar nhẹ) */
+        /* Các ô radar đang được thuật toán rà quét (Màu cyan mờ) */
         .cell-explored {
-            background-color: #ffeaa7 !important;
-            border: 2px dashed #f1c40f !important;
+            background-color: #103136 !important;
+            border: 1px dashed #00cec9 !important;
         }
-        /* Nút chấm xanh của lộ trình chốt */
+        /* Đường đi chốt cuối cùng */
         .cell-path {
-            background-color: #b3e5fc !important;
-            border: 2px dashed #0288d1 !important;
+            background-color: #093d39 !important;
+            border: 1px solid #00b894 !important;
         }
         .path-dot {
-            width: 12px;
-            height: 12px;
-            background-color: #0288d1;
+            width: 10px;
+            height: 10px;
+            background-color: #00b894;
             border-radius: 50%;
             margin: auto;
+            box-shadow: 0 0 10px #00b894;
         }
-        /* Khung bọc xe chống tràn kích thước */
+        /* Khung bọc xe */
         .car-wrapper {
             width: 100%;
             height: 100%;
@@ -180,31 +178,31 @@ def render_grid():
                 cell_class += " cell-obstacle"
             elif r == START_POS[0] and c == START_POS[1]:
                 cell_class += " cell-start"
-                content = "START"
+                content = "S"
             elif r == GOAL_POS[0] and c == GOAL_POS[1]:
                 cell_class += " cell-goal"
-                content = "GOAL"
+                content = "G"
             elif (r, c) in st.session_state.final_path_cells:
                 cell_class += " cell-path"
                 content = "<div class='path-dot'></div>"
             elif (r, c) in st.session_state.explored_cells:
                 cell_class += " cell-explored"
             
-            # Đè xe AGV lên ô hiện tại (Giữ nguyên cấu trúc vector chuẩn hướng Bắc)
+            # Đè xe AGV lên ô hiện tại (Tone màu xanh dương thương mại kết hợp đèn định vị LED)
             if r == st.session_state.car_r and c == st.session_state.car_c:
                 angle = DIR_ROTATION[st.session_state.car_d]
                 content = f"""
                 <div class='car-wrapper'>
-                    <svg width="46" height="46" viewBox="0 0 24 24" style="transform: rotate({angle}deg); overflow: visible;">
-                        <rect x="5" y="3" width="14" height="18" rx="4" fill="#0984e3" stroke="#130cb7" stroke-width="1.5"/>
-                        <path d="M7 8 C 7 6, 17 6, 17 8 L16 11 L8 11 Z" fill="#eccc68" opacity="0.9"/>
-                        <rect x="8" y="15" width="8" height="2" rx="0.5" fill="#ffffff" opacity="0.4"/>
-                        <circle cx="8" cy="4.5" r="1" fill="#fff"/>
-                        <circle cx="16" cy="4.5" r="1" fill="#fff"/>
-                        <rect x="3" y="5" width="2" height="4" rx="1" fill="#2d3436"/>
-                        <rect x="19" y="5" width="2" height="4" rx="1" fill="#2d3436"/>
-                        <rect x="3" y="15" width="2" height="4" rx="1" fill="#2d3436"/>
-                        <rect x="19" y="15" width="2" height="4" rx="1" fill="#2d3436"/>
+                    <svg width="44" height="44" viewBox="0 0 24 24" style="transform: rotate({angle}deg); overflow: visible;">
+                        <rect x="5" y="3" width="14" height="18" rx="4" fill="#0984e3" stroke="#74b9ff" stroke-width="1"/>
+                        <path d="M7 8 C 7 6, 17 6, 17 8 L16 11 L8 11 Z" fill="#dfe6e9" opacity="0.8"/>
+                        <rect x="8" y="15" width="8" height="2" rx="0.5" fill="#ffffff" opacity="0.3"/>
+                        <circle cx="8" cy="4.5" r="0.8" fill="#55efc4"/>
+                        <circle cx="16" cy="4.5" r="0.8" fill="#55efc4"/>
+                        <rect x="3" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
+                        <rect x="19" y="5" width="2" height="4" rx="1" fill="#1e272e"/>
+                        <rect x="3" y="15" width="2" height="4" rx="1" fill="#1e272e"/>
+                        <rect x="19" y="15" width="2" height="4" rx="1" fill="#1e272e"/>
                     </svg>
                 </div>
                 """
@@ -214,26 +212,26 @@ def render_grid():
     return html
 
 # --- 6. GIAO DIỆN CHÍNH ---
-st.title("⚙️ HỆ THỐNG ĐIỀU HƯỚNG AGV THƯƠNG MẠI (A* 6x6)")
+st.title("⚙️ HỆ THỐNG GIÁM SÁT & ĐỊNH TỰ ĐỘNG AGV")
 st.markdown("---")
 
 col1, col2 = st.columns([11, 8])
 
 with col1:
-    st.subheader("Mô Hình Lưới Sân Bãi")
+    st.subheader("Bản Đồ Số Lưới Không Gian")
     grid_placeholder = st.empty()
     grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
 
 with col2:
-    st.subheader("Trạng Thái")
-    st.metric(label="CHẾ ĐỘ", value=st.session_state.mode)
-    st.metric(label="CHI PHÍ TÍCH LŨY (c)", value=st.session_state.cost)
-    st.write(f"**Hướng xe:** {DIR_NAMES[st.session_state.car_d]}")
+    st.subheader("Trạng Thái Hệ Thống")
+    st.metric(label="CHẾ ĐỘ HOẠT ĐỘNG", value=st.session_state.mode)
+    st.metric(label="TỔNG CHI PHÍ TÍCH LŨY", value=st.session_state.cost)
+    st.write(f"**Hướng Vector Xe:** {DIR_NAMES[st.session_state.car_d]}")
     
     st.write("---")
     c_btn1, c_btn2 = st.columns(2)
     
-    if c_btn1.button("🤖 CHẠY AUTO A*"):
+    if c_btn1.button("🤖 KÍCH HOẠT AUTO A*"):
         st.session_state.mode = "AI SEARCHING..."
         st.session_state.explored_cells = set()
         st.session_state.final_path_cells = set()
@@ -310,6 +308,5 @@ with col2:
             rerun_page()
         if col_m4.button("↪️ XOAY PHẢI"):
             st.session_state.car_d = (st.session_state.car_d + 1) % 4
-            st.session_width = COST_TURN
             st.session_state.cost += COST_TURN
             rerun_page()
