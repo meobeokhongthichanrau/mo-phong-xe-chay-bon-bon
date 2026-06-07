@@ -2,7 +2,17 @@ import streamlit as st
 import heapq
 import time
 
-# --- CẤU HÌNH MAP 6X6 "BẪY CỰC KHÓ" CHO AI MÒ ĐƯỜNG ---
+# --- 1. LỆNH NÀY PHẢI ĐẶT LÊN ĐẦU TIÊN ĐỂ TRÁNH LỖI ĐỎ ---
+st.set_page_config(page_title="AI AGV 6x6 Maze", layout="centered")
+
+# Hàm bổ trợ giúp chạy mượt trên cả Streamlit bản cũ lẫn mới
+def rerun_page():
+    if hasattr(st, "rerun"):
+        st.rerun()
+    else:
+        st.experimental_rerun()
+
+# --- 2. CẤU HÌNH MAP 6X6 "BẪY CỰC KHÓ" CHO AI MÒ ĐƯỜNG ---
 GRID_SIZE = 6
 GRID = [
     [0, 0, 1, 0, 0, 0],
@@ -16,7 +26,6 @@ GRID = [
 START_POS = (0, 0, 2)  # (Dòng 0, Cột 0, Hướng Nam 🔽)
 GOAL_POS = (5, 5)      # Đích G ở góc dưới cùng bên phải (5,5)
 
-# Chi phí hành động đúng theo báo cáo của nhóm
 COST_FORWARD = 1
 COST_TURN = 2
 COST_BACKWARD = 3
@@ -25,7 +34,7 @@ DIRS = [(-1, 0), (0, 1), (1, 0), (0, -1)] # 0: Bắc, 1: Đông, 2: Nam, 3: Tây
 DIR_NAMES = ["Bắc 🔼", "Đông ▶️", "Nam 🔽", "Tây ◀️"]
 DIR_ROTATION = {0: -90, 1: 0, 2: 90, 3: 180} # Góc xoay CSS cho xe 🚗
 
-# --- KHỞI TẠO BỘ NHỚ TRẠNG THÁI (SESSION STATE) ---
+# --- 3. KHỞI TẠO BỘ NHỚ TRẠNG THÁI (SESSION STATE) ---
 if "car_r" not in st.session_state:
     st.session_state.car_r = START_POS[0]
     st.session_state.car_c = START_POS[1]
@@ -35,7 +44,7 @@ if "car_r" not in st.session_state:
     st.session_state.explored_cells = set()
     st.session_state.final_path_cells = set()
 
-# --- THUẬT TOÁN A* QUÉT MAP VÀ LƯU QUÁ TRÌNH MÒ ĐƯỜNG ---
+# --- 4. THUẬT TOÁN A* QUÉT MAP VÀ LƯU QUÁ TRÌNH MÒ ĐƯỜNG ---
 def heuristic(r, c, g_r, g_c):
     return (abs(r - g_r) + abs(c - g_c)) * COST_FORWARD
 
@@ -75,7 +84,7 @@ def solve_astar_with_vis():
             
     return [], exploration_order
 
-# --- HÀM VẼ GIAO DIỆN LƯỚI HTML/CSS TỰ ĐỘNG XOAY XE ---
+# --- 5. HÀM VẼ GIAO DIỆN LƯỚI HTML/CSS TỰ ĐỘNG XOAY XE ---
 def render_grid():
     html = """
     <style>
@@ -102,7 +111,7 @@ def render_grid():
                 cell_style = "background-color: #e74c3c; color: white;" # Đích
                 content = "🏁"
             elif (r, c) in st.session_state.final_path_cells:
-                cell_style = "background-color: #dff9fb;" # Đường chốt cuối cùng
+                cell_style = "background-color: #dff9fb;" # Đường chốt tối ưu cuối cùng
                 content = "🔹"
             elif (r, c) in st.session_state.explored_cells:
                 cell_style = "background-color: #ffeaa7;" # Vùng AI đã sục sạo quét qua
@@ -117,9 +126,8 @@ def render_grid():
     html += "</table>"
     return html
 
-# --- GIAO DIỆN WEB ---
-st.set_page_config(page_title="AI AGV 6x6 Maze", layout="centered")
-st.title("🚗 LIVE DEMO: QUÁ TRÌNH MÒ ĐƯỜNG CỦA XE (A* 6x6)")
+# --- 6. GIAO DIỆN WEB ---
+st.title("🚗 LIVE DEMO ")
 st.markdown("---")
 
 col1, col2 = st.columns([3, 2])
@@ -132,7 +140,7 @@ with col1:
 with col2:
     st.subheader("Bảng Thông Tin")
     st.metric(label="CHẾ ĐỘ HỆ THỐNG", value=st.session_state.mode)
-    st.metric(label="TỔNG CHI PHÍ ($c$)", value=st.session_state.cost)
+    st.metric(label="TỔNG CHI PHÍ (c)", value=st.session_state.cost)
     st.write(f"**Hướng xe:** {DIR_NAMES[st.session_state.car_d]}")
     
     st.write("---")
@@ -147,7 +155,7 @@ with col2:
         
         # GIAI ĐOẠN 1: AI đi mò đường thực tế (Hiển thị các ô màu vàng loang dần)
         for cell in exploration_order:
-            time.sleep(0.08) # Độ trễ vừa phải để thấy AI đang suy nghĩ, rà soát
+            time.sleep(0.08) 
             st.session_state.explored_cells.add(cell)
             grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
             
@@ -191,7 +199,7 @@ with col2:
         st.session_state.mode = "MANUAL"
         st.session_state.explored_cells = set()
         st.session_state.final_path_cells = set()
-        st.rerun()
+        rerun_page()
 
     # Điều khiển bằng tay (Manual Mode)
     if st.session_state.mode == "MANUAL" and (st.session_state.car_r, st.session_state.car_c) != GOAL_POS:
@@ -204,23 +212,23 @@ with col2:
             if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
                 st.session_state.car_r, st.session_state.car_c = nr, nc
                 st.session_state.cost += COST_FORWARD
-                st.rerun()
+                rerun_page()
         if col_m2.button("🔽 LÙI"):
             nr, nc = st.session_state.car_r - dr, st.session_state.car_c - dc
             if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
                 st.session_state.car_r, st.session_state.car_c = nr, nc
                 st.session_state.cost += COST_BACKWARD
-                st.rerun()
+                rerun_page()
                 
         col_m3, col_m4 = st.columns(2)
         if col_m3.button("↩️ RẼ TRÁI"):
             st.session_state.car_d = (st.session_state.car_d - 1) % 4
             st.session_state.cost += COST_TURN
-            st.rerun()
+            rerun_page()
         if col_m4.button("↪️ RẼ PHẢI"):
             st.session_state.car_d = (st.session_state.car_d + 1) % 4
             st.session_state.cost += COST_TURN
-            st.rerun()
+            rerun_page()
 
     if (st.session_state.car_r, st.session_state.car_c) == GOAL_POS and st.session_state.mode == "MANUAL":
         st.balloons()
