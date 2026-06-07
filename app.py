@@ -1,27 +1,9 @@
-import pygame
-import sys
+import streamlit as st
 import heapq
 import time
 
-# --- CẤU HÌNH HỆ THỐNG ---
-WIDTH, HEIGHT = 600, 700
-GRID_SIZE = 6 
-CELL_SIZE = 100
-FPS = 30
-
-# Màu sắc
-WHITE = (245, 245, 245)
-BLACK = (30, 30, 30)
-GRAY = (120, 120, 120)       # Vật cản X
-GREEN = (46, 204, 113)       # Điểm xuất phát S
-RED = (231, 76, 60)          # Điểm đích G
-BLUE = (52, 152, 219)        # Đường đi của xe
-YELLOW = (241, 196, 15)      # Thân xe màu vàng
-
-
-DIRS = [(-1, 0), (0, 1), (1, 0), (0, -1)]
-DIR_NAMES = ["Bắc", "Đông", "Nam", "Tây"]
-
+# --- CẤU HÌNH MAP BÃI ĐỖ XE (Lưới 6x6 giống hệt ảnh demo của bạn) ---
+GRID_SIZE = 6
 GRID = [
     [0, 0, 0, 0, 1, 0],
     [0, 1, 1, 0, 1, 0],
@@ -31,182 +13,157 @@ GRID = [
     [0, 0, 0, 1, 1, 0]
 ]
 
-START_POS = (0, 0, 2) 
-GOAL_POS = (5, 5)    
+START_POS = (0, 0, 2)  # (Dòng 0, Cột 0, Hướng Nam)
+GOAL_POS = (5, 5)      # Đích G ở góc dưới phải
 
-
+# Chi phí hành động theo báo cáo của nhóm bạn
 COST_FORWARD = 1
 COST_TURN = 2
 COST_BACKWARD = 3
 
-pygame.init()
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("LIVE DEMO: BÃI ĐỖ XE THÔNG MINH - AGV")
-clock = pygame.time.Clock()
-font = pygame.font.SysFont("Arial", 22, bold=True)
+DIRS = [(-1, 0), (0, 1), (1, 0), (0, -1)] # 0: Bắc, 1: Đông, 2: Nam, 3: Tây
+DIR_NAMES = ["Bắc 🔼", "Đông ▶️", "Nam 🔽", "Tây ◀️"]
+CAR_ARROWS = ["🔼", "▶️", "🔽", "◀️"]
 
+# --- KHỞI TẠO BỘ NHỚ TRẠNG THÁI (SESSION STATE) ---
+if "car_r" not in st.session_state:
+    st.session_state.car_r = START_POS[0]
+    st.session_state.car_c = START_POS[1]
+    st.session_state.car_d = START_POS[2]
+    st.session_state.cost = 0
+    st.session_state.mode = "MANUAL"
 
-def heuristic(r, c, d, g_r, g_c):
-   
-    manhattan = abs(r - g_r) + abs(c - g_c)
-    return manhattan * COST_FORWARD
+# --- THUẬT TOÁN A* TÌM ĐƯỜNG ---
+def heuristic(r, c, g_r, g_c):
+    return (abs(r - g_r) + abs(c - g_c)) * COST_FORWARD
 
 def solve_astar():
-  
     start_r, start_c, start_d = START_POS
     g_goal, r_goal = GOAL_POS
     
-    pq = [(heuristic(start_r, start_c, start_d, g_goal, r_goal), 0, start_r, start_c, start_d, [(start_r, start_c)])]
+    # Hàng đợi: (f_score, g_score, r, c, d, danh_sách_nút_đã_đi)
+    pq = [(heuristic(start_r, start_c, g_goal, r_goal), 0, start_r, start_c, start_d, [(start_r, start_c, start_d)])]
     visited = set()
     
     while pq:
         f, g, r, c, d, path = heapq.heappop(pq)
-        
         if (r, c) == GOAL_POS:
-            return path, g
+            return path
             
         if (r, c, d) in visited:
             continue
         visited.add((r, c, d))
         
-       
+        # 1. TIẾN
         dr, dc = DIRS[d]
         nr, nc = r + dr, c + dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-            heapq.heappush(pq, (g + COST_FORWARD + heuristic(nr, nc, d, g_goal, r_goal), g + COST_FORWARD, nr, nc, d, path + [(nr, nc)]))
+            pq.append((g + COST_FORWARD + heuristic(nr, nc, g_goal, r_goal), g + COST_FORWARD, nr, nc, d, path + [(nr, nc, d)]))
             
-      
+        # 2. LÙI
         nr, nc = r - dr, c - dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-            heapq.heappush(pq, (g + COST_BACKWARD + heuristic(nr, nc, d, g_goal, r_goal), g + COST_BACKWARD, nr, nc, d, path + [(nr, nc)]))
+            pq.append((g + COST_BACKWARD + heuristic(nr, nc, g_goal, r_goal), g + COST_BACKWARD, nr, nc, d, path + [(nr, nc, d)]))
             
-   
+        # 3. RẼ (Trái/Phải)
         for next_d in [(d - 1) % 4, (d + 1) % 4]:
-            heapq.heappush(pq, (g + COST_TURN + heuristic(r, c, next_d, g_goal, r_goal), g + COST_TURN, r, c, next_d, path))
+            pq.append((g + COST_TURN + heuristic(r, c, g_goal, r_goal), g + COST_TURN, r, c, next_d, path + [(r, c, next_d)]))
             
-    return [], 0
+    return []
 
-
-def draw_interface(car_r, car_c, car_d, mode, cost, auto_path=[]):
-    screen.fill((255, 255, 255))
-    
-  
+# --- HÀM VẼ BẢN ĐỒ BẰNG HTML CHO ĐẸP VÀ MƯỢT ---
+def render_grid():
+    html = """
+    <style>
+        .grid-table { border-collapse: collapse; margin: auto; }
+        .grid-cell { width: 60px; height: 60px; text-align: center; font-size: 24px; font-weight: bold; border: 2px solid #333; }
+    </style>
+    <table class='grid-table'>
+    """
     for r in range(GRID_SIZE):
+        html += "<tr>"
         for c in range(GRID_SIZE):
-            rect = pygame.Rect(c * CELL_SIZE, r * CELL_SIZE, CELL_SIZE, CELL_SIZE)
-            
-            if GRID[r][c] == 1:
-                pygame.draw.rect(screen, GRAY, rect) 
+            if r == st.session_state.car_r and c == st.session_state.car_c:
+                # Ô chứa xe tự hành
+                cell_style = "background-color: #f1c40f;" # Vàng
+                content = CAR_ARROWS[st.session_state.car_d]
+            elif GRID[r][c] == 1:
+                # Vật cản X
+                cell_style = "background-color: #7f8c8d; color: white;" # Xám
+                content = "❌"
+            elif r == START_POS[0] and c == START_POS[1]:
+                # Vị trí xuất phát ban đầu
+                cell_style = "background-color: #2ecc71;" # Xanh lá
+                content = "S"
+            elif r == GOAL_POS[0] and c == GOAL_POS[1]:
+                # Đích đỗ xe
+                cell_style = "background-color: #e74c3c; color: white;" # Đỏ
+                content = "G"
             else:
-                pygame.draw.rect(screen, BLACK, rect, 1) 
+                # Đường đi trống
+                cell_style = "background-color: #ffffff;"
+                content = ""
+            html += f"<td class='grid-cell' style='{cell_style}'>{content}</td>"
+        html += "</tr>"
+    html += "</table>"
+    return html
+
+# --- GIAO DIỆN CHÍNH CỦA TRANG WEB STREAMLIT ---
+st.set_page_config(page_title="AGV Routing Demo", layout="centered")
+st.title("🚗 LIVE DEMO: BÃI ĐỖ XE THÔNG MINH (AGV)")
+st.markdown("---")
+
+# Chia giao diện làm 2 cột: Trái vẽ Map, Phải điều khiển
+col1, col2 = st.columns([3, 2])
+
+with col1:
+    st.subheader("Bản Đồ Lưới Mô Phỏng")
+    grid_placeholder = st.empty()
+    grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
+
+with col2:
+    st.subheader("Bảng Điều Khiển")
+    st.metric(label="CHẾ ĐỘ HIỆN TẠI", value=st.session_state.mode)
+    st.metric(label="TỔNG CHI PHÍ ($c$)", value=st.session_state.cost)
+    st.write(f"**Hướng xe:** {DIR_NAMES[st.session_state.car_d]}")
+    
+    # Nút chọn chế độ hệ thống
+    st.write("---")
+    c_btn1, c_btn2 = st.columns(2)
+    
+    if c_btn1.button("🤖 CHẠY AUTO A*"):
+        st.session_state.mode = "AUTONOMOUS (AI)"
+        path = solve_astar()
+        if path:
+            # Chạy hiệu ứng xe di chuyển từng bước một trên web
+            current_g = 0
+            for idx in range(1, len(path)):
+                time.sleep(0.4) # Độ trễ để thấy xe lăn bánh
+                prev_r, prev_c, prev_d = path[idx-1]
+                r, c, d = path[idx]
                 
-          
-            if (r, c) == (START_POS[0], START_POS[1]):
-                pygame.draw.rect(screen, GREEN, rect, 4)
-            elif (r, c) == GOAL_POS:
-                pygame.draw.rect(screen, RED, rect)
-                
- 
-    if mode == "AUTO" and len(auto_path) > 1:
-        for i in range(len(auto_path) - 1):
-            p1 = auto_path[i]
-            p2 = auto_path[i+1]
-            pygame.draw.line(screen, BLUE, (p1[1]*CELL_SIZE + 50, p1[0]*CELL_SIZE + 50), (p2[1]*CELL_SIZE + 50, p2[0]*CELL_SIZE + 50), 5)
-
-    
-    car_center = (car_c * CELL_SIZE + 50, car_r * CELL_SIZE + 50)
-    pygame.draw.circle(screen, YELLOW, car_center, 30)
-  
-    dr, dc = DIRS[car_d]
-    arrow_end = (car_center[0] + dc * 25, car_center[1] + dr * 25)
-    pygame.draw.line(screen, BLACK, car_center, arrow_end, 5)
-
-
-    panel_y = GRID_SIZE * CELL_SIZE + 15
-    mode_text = font.render(f"CHẾ ĐỘ: {mode}", True, RED if mode=="MANUAL" else BLUE)
-    cost_text = font.render(f"TỔNG CHI PHÍ: {cost}", True, BLACK)
-    dir_text = font.render(f"HƯỚNG XE: {DIR_NAMES[car_d]}", True, BLACK)
-    guide_text = font.render("[M]: Tự lái | [A]: Chạy Auto A* | [R]: Reset", True, GRAY)
-    
-    screen.blit(mode_text, (20, panel_y))
-    screen.blit(cost_text, (250, panel_y))
-    screen.blit(dir_text, (20, panel_y + 30))
-    screen.blit(guide_text, (20, panel_y + 60))
-    
-    pygame.display.flip()
-
-def main():
-    car_r, car_c, car_d = START_POS
-    mode = "MANUAL" 
-    cost = 0
-    auto_path = []
-    auto_idx = 0
-    
-    running = True
-    while running:
-        clock.tick(FPS)
-        
-     
-        if mode == "AUTO" and auto_path and auto_idx < len(auto_path):
-            time.sleep(0.3)
-            next_r, next_c = auto_path[auto_idx]
-        
-            if (next_r, next_c) != (car_r, car_c):
-                dr, dc = DIRS[car_d]
-                if car_r + dr == next_r and car_c + dc == next_c:
-                    cost += COST_FORWARD
-                else:
-                    cost += COST_BACKWARD
-                car_r, car_c = next_r, next_c
-            auto_idx += 1
-            
-        # Kiểm tra nút bấm 
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-                
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r: # RESET
-                    car_r, car_c, car_d = START_POS
-                    cost = 0
-                    auto_path = []
-                    mode = "MANUAL"
-                elif event.key == pygame.K_m: # Chuyển MANUAL
-                    mode = "MANUAL"
-                    car_r, car_c, car_d = START_POS
-                    cost = 0
-                elif event.key == pygame.K_a: # Chuyển AUTO
-                    mode = "AUTO"
-                    car_r, car_c, car_d = START_POS
-                   
-                    auto_path, total_astar_cost = solve_astar()
-                    cost = 0
-                    auto_idx = 0
+                # Tính toán chi phí thực tế cộng dồn
+                if (r, c) != (prev_r, prev_c):
+                    dr, dc = DIRS[prev_d]
+                    if prev_r + dr == r and prev_c + dc == c:
+                        current_g += COST_FORWARD
+                    else:
+                        current_g += COST_BACKWARD
+                if d != prev_d:
+                    current_g += COST_TURN
                     
-                # Điều khiển xe bằng tay 
-                elif mode == "MANUAL" and (car_r, car_c) != GOAL_POS:
-                    dr, dc = DIRS[car_d]
-                    if event.key == pygame.K_UP: 
-                        nr, nc = car_r + dr, car_c + dc
-                        if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-                            car_r, car_c = nr, nc
-                            cost += COST_FORWARD
-                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_DOWN: 
-                        nr, nc = car_r - dr, car_c - dc
-                        if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-                            car_r, car_c = nr, nc
-                            cost += COST_BACKWARD
-                    elif event.key == pygame.K_LEFT: 
-                        car_d = (car_d - 1) % 4
-                        cost += COST_TURN
-                    elif event.key == pygame.K_RIGHT: 
-                        car_d = (car_d + 1) % 4
-                        cost += COST_TURN
-
-        draw_interface(car_r, car_c, car_d, mode, cost, auto_path)
-        
-    pygame.quit()
-    sys.exit()
-
-if __name__ == "__main__":
-    main()
+                # Cập nhật tọa độ mới lên màn hình web
+                st.session_state.car_r = r
+                st.session_state.car_c = c
+                st.session_state.car_d = d
+                st.session_state.cost = current_g
+                grid_placeholder.markdown(render_grid(), unsafe_allow_html=True)
+            st.success("Xe đã về ô đỗ an toàn nhờ thuật toán A*!")
+            
+    if c_btn2.button("🔄 RESET MAP"):
+        st.session_state.car_r = START_POS[0]
+        st.session_state.car_c = START_POS[1]
+        st.session_state.car_d = START_POS[2]
+        st.session_state.cost = 0
+        st.session_state.mode = "MANUAL"
+        st.rerun
