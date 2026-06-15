@@ -166,11 +166,15 @@ def ensure_defaults():
     if "move_delay" not in st.session_state:
         st.session_state.move_delay = 0.35
     if "tree_zoom" not in st.session_state:
-        st.session_state.tree_zoom = 1.25
+        # Mặc định nhỏ hơn bản cũ để không bị quá khổ khi chiếu.
+        st.session_state.tree_zoom = 0.82
     if "tree_height" not in st.session_state:
-        st.session_state.tree_height = 560
+        st.session_state.tree_height = 520
     if "show_scan_tree" not in st.session_state:
         st.session_state.show_scan_tree = True
+    if "anti_flash_mode" not in st.session_state:
+        # Khi bật: không vẽ lại cây liên tục lúc Auto chạy, tránh cảm giác flash/chớp trắng.
+        st.session_state.anti_flash_mode = True
 
 
 ensure_defaults()
@@ -489,8 +493,8 @@ def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=N
         bgcolor="#FFFFFF",
         margin="0.08",
         pad="0.08",
-        ranksep="0.85",
-        nodesep="0.45",
+        ranksep="0.55",
+        nodesep="0.28",
         concentrate="false",
     )
     dot.attr(
@@ -498,11 +502,11 @@ def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=N
         shape="box",
         style="filled,rounded",
         fontname="Arial Bold",
-        fontsize="15",
-        penwidth="2.2",
-        margin="0.12,0.08",
-        width="1.25",
-        height="0.55",
+        fontsize="12",
+        penwidth="1.8",
+        margin="0.08,0.05",
+        width="1.02",
+        height="0.42",
         color="#334155",
         fillcolor="#FFFFFF",
         fontcolor="#0F172A",
@@ -511,10 +515,10 @@ def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=N
         "edge",
         color="#334155",
         fontname="Arial Bold",
-        fontsize="12",
+        fontsize="10",
         fontcolor="#0F172A",
-        arrowsize="0.75",
-        penwidth="1.8",
+        arrowsize="0.62",
+        penwidth="1.45",
     )
 
     node_ids = {node["id"] for node in nodes}
@@ -567,7 +571,7 @@ def render_tree_html(tree_source, height=560, zoom=1.25):
                 background: #FFFFFF;
                 border: 4px solid #0F172A;
                 border-radius: 18px;
-                padding: 16px;
+                padding: 10px;
                 box-sizing: border-box;
                 box-shadow: 0 14px 35px rgba(15, 23, 42, 0.16);
             }}
@@ -616,6 +620,10 @@ def render_scene(
     tree_slot,
     log_slot,
     *,
+    update_grid=True,
+    update_info=True,
+    update_tree=True,
+    update_log=True,
     car_pos=None,
     current_cost=None,
     explored_cells=None,
@@ -644,37 +652,36 @@ def render_scene(
 
     is_done = (car_pos[0], car_pos[1]) == GOAL_POS
 
-    grid_slot.empty()
-    with grid_slot.container():
-        components.html(
+    # Không gọi .empty() trước mỗi lần cập nhật nữa.
+    # Bản cũ xóa khung rồi dựng lại liên tục nên nhìn giống flash/chớp trắng.
+    if update_grid:
+        grid_slot.markdown(
             render_grid_html(explored_cells, scanned_cells, optimal_cells, car_pos, is_done),
-            height=420,
-            scrolling=False,
+            unsafe_allow_html=True,
         )
 
-    info_slot.empty()
-    with info_slot.container():
-        st.info(
+    if update_info:
+        info_slot.info(
             f"📍 Ô: `({car_pos[0]}, {car_pos[1]})`  |  "
             f"🧭 Hướng: **{DIR_NAMES[car_pos[2]]}**  |  "
             f"💰 Chi phí: `{current_cost}`  |  "
             f"🎮 Lệnh: **{last_action}**"
         )
 
-    tree_source = draw_tree_source(tree_nodes, tree_edges, current_tree_id, scanned_node_ids, path_node_ids)
-    tree_slot.empty()
-    with tree_slot.container():
-        render_tree_html(tree_source, height=int(st.session_state.tree_height), zoom=float(st.session_state.tree_zoom))
+    if update_tree:
+        tree_source = draw_tree_source(tree_nodes, tree_edges, current_tree_id, scanned_node_ids, path_node_ids)
+        with tree_slot.container():
+            render_tree_html(tree_source, height=int(st.session_state.tree_height), zoom=float(st.session_state.tree_zoom))
 
-    log_slot.empty()
-    with log_slot.container():
-        if message:
-            if "Không" in message or "lỗi" in message.lower():
-                st.warning(message)
-            elif "xong" in message.lower() or "tối ưu" in message.lower() or "tìm thấy" in message.lower():
-                st.success(message)
-            else:
-                st.info(message)
+    if update_log:
+        with log_slot.container():
+            if message:
+                if "Không" in message or "lỗi" in message.lower():
+                    st.warning(message)
+                elif "xong" in message.lower() or "tối ưu" in message.lower() or "tìm thấy" in message.lower():
+                    st.success(message)
+                else:
+                    st.info(message)
 
 
 # ============================================================
@@ -713,8 +720,11 @@ def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
     base_nodes = list(st.session_state.tree_nodes)
     base_edges = list(st.session_state.tree_edges)
     base_explored = set(st.session_state.explored_cells)
+    anti_flash = bool(st.session_state.anti_flash_mode)
 
     # PHA 1: A* quét/mở rộng node trước. Xe chưa chạy.
+    # Khi chống nhấp nháy bật, chỉ cập nhật sa bàn + thông báo trong lúc quét;
+    # cây sẽ được vẽ đầy đủ một lần sau khi A* chốt đường tối ưu.
     last_visible_count = 0
     for i, frame in enumerate(plan["scan_frames"], start=1):
         visible_count = frame["visible_count"] if st.session_state.show_scan_tree else last_visible_count
@@ -738,8 +748,13 @@ def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
             current_tree_id=frame["current_node_id"],
             scanned_node_ids=frame["scanned_node_ids"],
             path_node_ids=set(),
-            message=f"🔎 Pha 1/2: A* đang quét trước khi chạy... {i}/{len(plan['scan_frames'])}. {frame['message']}",
+            message=(
+                f"🔎 Pha 1/2: A* đang quét trước khi chạy... {i}/{len(plan['scan_frames'])}. "
+                f"{frame['message']}"
+                + ("  |  Đang bật chống nhấp nháy: cây sẽ cập nhật sau khi quét xong." if anti_flash else "")
+            ),
             last_action="A* SCAN",
+            update_tree=not anti_flash,
         )
         time.sleep(float(st.session_state.scan_delay))
 
@@ -791,6 +806,7 @@ def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
             path_node_ids=plan["path_node_ids"],
             message=f"🚗 Pha 2/2: Xe đang chạy theo đường tối ưu... bước {step_index}/{len(plan['path_steps'])}: {step['action']}.",
             last_action=step["action"],
+            update_tree=not anti_flash,
         )
         time.sleep(float(st.session_state.move_delay))
 
@@ -841,16 +857,16 @@ with col_left:
             step=0.04,
         )
         st.session_state.tree_zoom = st.slider(
-            "Phóng to sơ đồ cây",
-            min_value=0.90,
-            max_value=2.00,
+            "Thu nhỏ / phóng to sơ đồ cây",
+            min_value=0.55,
+            max_value=1.35,
             value=float(st.session_state.tree_zoom),
             step=0.05,
         )
         st.session_state.tree_height = st.slider(
             "Chiều cao khung cây",
-            min_value=420,
-            max_value=760,
+            min_value=360,
+            max_value=700,
             value=int(st.session_state.tree_height),
             step=20,
         )
@@ -858,12 +874,16 @@ with col_left:
             "Hiện cây mọc dần khi A* quét",
             value=bool(st.session_state.show_scan_tree),
         )
+        st.session_state.anti_flash_mode = st.checkbox(
+            "Chống nhấp nháy khi Auto chạy",
+            value=bool(st.session_state.anti_flash_mode),
+        )
 
     controls_slot = st.container()
 
 with col_right:
     st.markdown("### 🌳 Sơ Đồ Cây Trạng Thái")
-    st.caption("Cây dùng nền sáng, node to hơn, mọc ngang trái → phải. Kéo thanh cuộn trong khung để xem nhánh dài.")
+    st.caption("Cây nền sáng, kích thước gọn hơn, mọc ngang trái → phải. Có thể kéo thanh cuộn trong khung để xem nhánh dài.")
     tree_slot = st.empty()
     log_slot = st.empty()
 
