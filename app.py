@@ -48,7 +48,7 @@ if "current_cost" not in st.session_state:
 if "explored_cells" not in st.session_state:
     st.session_state.explored_cells = set([(0, 0)])
 
-# Cấu trúc lưu cây lịch sử thực tế: (r, c, d, cost, node_id, parent_id)
+# Cấu trúc lưu cây: (r, c, d, cost, node_id, parent_id)
 if "tree_history" not in st.session_state:
     start_id = "0-0-2-0"
     st.session_state.tree_history = [(0, 0, 2, 0, start_id, None)]
@@ -63,17 +63,21 @@ if "auto_index" not in st.session_state:
     st.session_state.auto_index = 0
 
 
-# --- 4. THUẬT TOÁN A* TÌM ĐƯỜNG NGẮN NHẤT, TỐI ƯU CHI PHÍ ---
+# --- 4. THUẬT TOÁN A* TỐI ƯU CHUẨN - TÌM TỪ VỊ TRÍ HIỆN TẠI ---
 def heuristic(r, c, g_r, g_c):
     return (abs(r - g_r) + abs(c - g_c)) * COST_FORWARD
 
-def run_astar_search():
-    start_r, start_c, start_d = START_POS
+def run_astar_search_from_current():
+    # Lấy vị trí và chi phí hiện tại của xe làm điểm xuất phát cho A*
+    curr_r, curr_c, curr_d = st.session_state.car_pos
+    curr_cost = st.session_state.current_cost
     r_goal, c_goal = GOAL_POS
-    start_id = f"{start_r}-{start_c}-{start_d}-0"
-    h_start = heuristic(start_r, start_c, r_goal, c_goal)
     
-    pq = [(h_start, 0, start_r, start_c, start_d, [(start_r, start_c, start_d, 0, start_id, None)])]
+    start_id = f"{curr_r}-{curr_c}-{curr_d}-{curr_cost}"
+    h_start = heuristic(curr_r, curr_c, r_goal, c_goal)
+    
+    # Hàng đợi ưu tiên: (f_score, g_score, r, c, d, danh_sách_các_bước_đi_tiếp_theo)
+    pq = [(curr_cost + h_start, curr_cost, curr_r, curr_c, curr_d, [])]
     visited = {}
 
     while pq:
@@ -87,54 +91,58 @@ def run_astar_search():
             return full_history
 
         current_id = f"{r}-{c}-{d}-{g}"
-        
-        # Duyệt các hướng lân cận
         dr, dc = DIRS[d]
-        # 1. TIẾN
+        
+        # 1. HÀNH ĐỘNG TIẾN
         nr, nc = r + dr, c + dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
             next_g = g + COST_FORWARD
             next_id = f"{nr}-{nc}-{d}-{next_g}"
-            heapq.heappush(pq, (next_g + heuristic(nr, nc, r_goal, c_goal), next_g, nr, nc, d, full_history + [(nr, nc, d, next_g, next_id, current_id)]))
+            pq_item = (next_g + heuristic(nr, nc, r_goal, c_goal), next_g, nr, nc, d, full_history + [(nr, nc, d, next_g, next_id, current_id)])
+            heapq.heappush(pq, pq_item)
             
-        # 2. LÙI
+        # 2. HÀNH ĐỘNG LÙI
         nr, nc = r - dr, c - dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
             next_g = g + COST_BACKWARD
             next_id = f"{nr}-{nc}-{d}-{next_g}"
-            heapq.heappush(pq, (next_g + heuristic(nr, nc, r_goal, c_goal), next_g, nr, nc, d, full_history + [(nr, nc, d, next_g, next_id, current_id)]))
+            pq_item = (next_g + heuristic(nr, nc, r_goal, c_goal), next_g, nr, nc, d, full_history + [(nr, nc, d, next_g, next_id, current_id)])
+            heapq.heappush(pq, pq_item)
             
-        # 3. XOAY
+        # 3. HÀNH ĐỘNG XOAY HƯỚNG (TRÁI / PHẢI)
         for next_d in [(d - 1) % 4, (d + 1) % 4]:
             next_g = g + COST_TURN
             next_id = f"{r}-{c}-{next_d}-{next_g}"
-            heapq.heappush(pq, (next_g + heuristic(r, c, r_goal, c_goal), next_g, r, c, next_d, full_history + [(r, c, next_d, next_g, next_id, current_id)]))
+            pq_item = (next_g + heuristic(r, c, r_goal, c_goal), next_g, r, c, next_d, full_history + [(r, c, next_d, next_g, next_id, current_id)])
+            heapq.heappush(pq, pq_item)
             
-    return full_history
+    return []
 
 
-# --- 5. CẤU HÌNH SƠ ĐỒ CÂY TỎA NHÁNH SIÊU NHỎ GỌN (CHỐNG PHÌNH TO) ---
+# --- 5. DỰNG SƠ ĐỒ CÂY TỰ ĐỘNG TỎA NHÁNH SANG NGANG TỰ NHIÊN ---
 def draw_beautiful_tree(history_list):
-    # Khóa cứng size='4.0,5.0!' để ép Graphviz thu nhỏ các node lại, không cho phép tràn màn hình
     dot = graphviz.Digraph()
-    dot.attr(rankdir='TB', size='4.0,5.0!', fixedsize='true', bgcolor='transparent')
+    # rankdir='TB' kết hợp splines='true' và không ép cứng size giúp sơ đồ phân cấp rẽ nhánh sang ngang rất đẹp
+    dot.attr(rankdir='TB', splines='true', bgcolor='transparent')
     
-    # Định dạng các node nhỏ hơn gấp 3 lần, cỡ chữ mini (7pt) tinh tế
+    # Thiết lập node vừa vặn, bo góc mềm mại
     dot.attr('node', style='filled,rounded', shape='box', 
              fillcolor='#1e252b', fontcolor='#ffffff', color='#34414c',
-             fontname='Arial Bold', fontsize='7', penwidth='0.8', 
-             width='0.45', height='0.20')
-    dot.attr('edge', color='#ffffff', arrowsize='0.25', penwidth='0.7')
+             fontname='Arial Bold', fontsize='10', penwidth='1.2', 
+             width='0.8', height='0.3')
+    dot.attr('edge', color='#ffffff', arrowsize='0.5', penwidth='1.0')
     
     for i, (r, c, d, g, node_id, parent_id) in enumerate(history_list):
+        label_text = f"({r},{c})\n{DIR_ARROWS[d]} g={g}"
+        
         if i == 0:
-            dot.node(node_id, label=f"({r},{c}) {DIR_ARROWS[d]}", fillcolor='#2ed573', fontcolor='#ffffff', color='#26af5f')
+            dot.node(node_id, label=label_text, fillcolor='#2ed573', fontcolor='#ffffff', color='#26af5f')
         elif (r, c) == GOAL_POS:
-            dot.node(node_id, label=f"({r},{c}) {DIR_ARROWS[d]}", fillcolor='#ff4757', fontcolor='#ffffff', color='#ff2e44')
+            dot.node(node_id, label=label_text, fillcolor='#ff4757', fontcolor='#ffffff', color='#ff2e44')
         elif i == len(history_list) - 1:
-            dot.node(node_id, label=f"({r},{c}) {DIR_ARROWS[d]}", fillcolor='#1e90ff', fontcolor='#ffffff', color='#0984e3')
+            dot.node(node_id, label=label_text, fillcolor='#1e90ff', fontcolor='#ffffff', color='#0984e3')
         else:
-            dot.node(node_id, label=f"({r},{c}) {DIR_ARROWS[d]}")
+            dot.node(node_id, label=label_text)
             
         if parent_id:
             dot.edge(parent_id, node_id)
@@ -191,22 +199,24 @@ def render_grid_dynamic(explored, car_pos, is_done):
     return html
 
 
-# --- 7. LUỒNG XỬ LÝ CHẠY TỰ ĐỘNG (REAL-TIME) ---
+# --- 7. LUỒNG ĐIỀU KHIỂN CHẠY TỰ ĐỘNG TỪNG BƯỚC (REAL-TIME EFFECT) ---
 if st.session_state.is_auto_running:
     if st.session_state.auto_index < len(st.session_state.auto_steps):
-        time.sleep(0.4)  # Đóng vai trò delay mượt mà từng bước
-        curr_snap = st.session_state.auto_steps[st.session_state.auto_index]
-        st.session_state.car_pos = (curr_snap[0], curr_snap[1], curr_snap[2])
-        st.session_state.current_cost = curr_snap[3]
-        st.session_state.explored_cells.add((curr_snap[0], curr_snap[1]))
-        st.session_state.tree_history = st.session_state.auto_steps[:st.session_state.auto_index + 1]
+        time.sleep(0.5)  # Tạo độ trễ từ từ cho việc di chuyển xe và mọc nhánh cây
+        next_step = st.session_state.auto_steps[st.session_state.auto_index]
+        
+        st.session_state.car_pos = (next_step[0], next_step[1], next_step[2])
+        st.session_state.current_cost = next_step[3]
+        st.session_state.explored_cells.add((next_step[0], next_step[1]))
+        st.session_state.tree_history.append(next_step)
+        
         st.session_state.auto_index += 1
         rerun_page()
     else:
         st.session_state.is_auto_running = False
 
 
-# --- 8. GIAO DIỆN HIỂN THỊ CHÍNH (CHIA CỘT TỶ LỆ CÂN ĐỐI) ---
+# --- 8. GIAO DIỆN HIỂN THỊ CHÍNH ---
 st.title("🖥️ HỆ THỐNG MÔ PHỎNG VÀ ĐỊNH TUYẾN XE AGV")
 st.markdown("---")
 
@@ -219,12 +229,12 @@ with col_left:
     components.html(render_grid_dynamic(st.session_state.explored_cells, st.session_state.car_pos, is_finished), height=330, scrolling=False)
     st.info(f"📍 Ô: `({st.session_state.car_pos[0]}, {st.session_state.car_pos[1]})` | 🧭 Hướng: **{DIR_NAMES[st.session_state.car_pos[2]]}** | 💰 Chi phí: `{st.session_state.current_cost}`")
 
-    # --- CỤM NÚT ĐIỀU KHIỂN ĐÃ ĐƯỢC THU GỌN THEO LƯỚI 2X2 BIỂU DIỄN LÁI THỦ CÔNG ---
+    # --- CỤM ĐIỀU KHIỂN LÁI XE THỦ CÔNG (LƯỚI 2X2 GỌN GÀNG) ---
     st.markdown("##### 🕹️ Lái xe thủ công:")
     current_r, current_c, current_d = st.session_state.car_pos
     parent_id = f"{current_r}-{current_c}-{current_d}-{st.session_state.current_cost}"
     
-    # Hàng nút 1: Tiến & Lùi
+    # Hàng 1: Tiến & Lùi
     btn_col1, btn_col2 = st.columns(2)
     if btn_col1.button("🔼 TIẾN (+1)", use_container_width=True, disabled=st.session_state.is_auto_running or is_finished):
         dr, dc = DIRS[current_d]
@@ -250,7 +260,7 @@ with col_left:
             st.session_state.explored_cells.add((nr, nc))
             rerun_page()
 
-    # Hàng nút 2: Xoay Trái & Xoay Phải
+    # Hàng 2: Xoay Trái & Xoay Phải
     btn_col3, btn_col4 = st.columns(2)
     if btn_col3.button("🔄 XOAY TRÁI (+2)", use_container_width=True, disabled=st.session_state.is_auto_running or is_finished):
         new_d = (current_d - 1) % 4
@@ -271,13 +281,17 @@ with col_left:
         rerun_page()
 
     st.markdown("---")
-    # --- KHU VỰC CÁC NÚT ĐIỀU KHIỂN HỆ THỐNG LỚN ---
+    # --- CỤM NÚT ĐIỀU KHIỂN HỆ THỐNG CHÍNH ---
     ctrl1, ctrl2 = st.columns(2)
     if ctrl1.button("🤖 KÍCH HOẠT AUTO", use_container_width=True, type="primary", disabled=st.session_state.is_auto_running or is_finished):
-        st.session_state.auto_steps = run_astar_search()
-        st.session_state.auto_index = 0
-        st.session_state.is_auto_running = True
-        rerun_page()
+        steps = run_astar_search_from_current()
+        if steps:
+            st.session_state.auto_steps = steps
+            st.session_state.auto_index = 0
+            st.session_state.is_auto_running = True
+            rerun_page()
+        else:
+            st.warning("⚠️ Không tìm thấy đường đi hợp lệ đến đích G!")
 
     if ctrl2.button("🔄 RESET HỆ THỐNG", use_container_width=True):
         st.session_state.car_pos = START_POS
@@ -292,6 +306,6 @@ with col_left:
 
 with col_right:
     st.markdown("### 🌳 Sơ Đồ Cây Trạng Thái")
-    # Lấy chuỗi dữ liệu dot và vẽ ra màn hình ở chế độ KHÔNG TỰ CO GIÃN (use_container_width=False)
     tree_src = draw_beautiful_tree(st.session_state.tree_history)
-    st.graphviz_chart(tree_src, use_container_width=False)
+    # Bật true để sơ đồ co giãn tự động theo đúng chiều rộng khung giao diện phải, dễ quan sát các nhánh tỏa ngang
+    st.graphviz_chart(tree_src, use_container_width=True)
