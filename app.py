@@ -570,12 +570,13 @@ def svg_from_graphviz(tree_source):
 def render_tree_html(tree_source, height=500, zoom=0.70):
     svg = svg_from_graphviz(tree_source)
 
-    # FIX THẬT: không dùng triple-string bị thụt dòng.
-    # Markdown gặp dòng HTML thụt 4 dấu cách là nó biến thành code block,
-    # nên lần trước trang mới hiện nguyên <div>, <svg> ra màn hình.
-    return f"""<style>
+    # FIX TRIỆT ĐỂ:
+    # Không dùng f-string cho CSS vì dấu { } trong CSS sẽ làm Python hiểu nhầm
+    # thành format placeholder và gây ValueError ở .tree-box.
+    # Dùng % formatting để dấu { } của CSS giữ nguyên 100%.
+    style_html = """<style>
 .tree-box {
-    height: {height}px;
+    height: %dpx;
     overflow: auto;
     background: #FFFFFF;
     border: 4px solid #0F172A;
@@ -586,7 +587,7 @@ def render_tree_html(tree_source, height=500, zoom=0.70):
 }
 .tree-content {
     display: inline-block;
-    zoom: {zoom};
+    zoom: %.2f;
     transform-origin: top left;
 }
 .tree-content svg {
@@ -614,16 +615,21 @@ def render_tree_html(tree_source, height=500, zoom=0.70):
     padding: 4px 9px;
     background: #F8FAFC;
 }
-</style>
-<div class="tree-box">
-<div class="legend">
-<span class="chip">🟦 Node hiện tại</span>
-<span class="chip">🟨 Đường tối ưu</span>
-<span class="chip">🟦 nhạt Node đã quét</span>
-<span class="chip">🟥 Đích G</span>
-</div>
-<div class="tree-content">{svg}</div>
-</div>""".strip()
+</style>""" % (int(height), float(zoom))
+
+    return (
+        style_html
+        + '<div class="tree-box">'
+        + '<div class="legend">'
+        + '<span class="chip">🟦 Node hiện tại</span>'
+        + '<span class="chip">🟨 Đường tối ưu</span>'
+        + '<span class="chip">🟦 nhạt Node đã quét</span>'
+        + '<span class="chip">🟥 Đích G</span>'
+        + '</div>'
+        + '<div class="tree-content">'
+        + svg
+        + '</div></div>'
+    )
 
 
 # ============================================================
@@ -685,10 +691,23 @@ def render_scene(
 
     if update_tree:
         tree_source = draw_tree_source(tree_nodes, tree_edges, current_tree_id, scanned_node_ids, path_node_ids)
-        tree_slot.markdown(
-            render_tree_html(tree_source, height=int(st.session_state.tree_height), zoom=float(st.session_state.tree_zoom)),
-            unsafe_allow_html=True,
+        tree_html = render_tree_html(
+            tree_source,
+            height=int(st.session_state.tree_height),
+            zoom=float(st.session_state.tree_zoom),
         )
+        # Ưu tiên st.html để Streamlit render HTML/SVG thật, không biến thành chữ <div>/<svg>.
+        # Nếu Streamlit version cũ chưa có .html thì fallback sang components.html.
+        # Không fallback sang st.markdown nữa vì một số bản Streamlit dễ hiện nguyên HTML thành text.
+        if hasattr(tree_slot, "html"):
+            tree_slot.html(tree_html)
+        else:
+            with tree_slot.container():
+                components.html(
+                    tree_html,
+                    height=int(st.session_state.tree_height) + 40,
+                    scrolling=True,
+                )
 
     if update_log:
         with log_slot.container():
