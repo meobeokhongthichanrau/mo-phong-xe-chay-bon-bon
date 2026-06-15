@@ -691,23 +691,12 @@ def render_scene(
 
     if update_tree:
         tree_source = draw_tree_source(tree_nodes, tree_edges, current_tree_id, scanned_node_ids, path_node_ids)
-        tree_html = render_tree_html(
-            tree_source,
-            height=int(st.session_state.tree_height),
-            zoom=float(st.session_state.tree_zoom),
-        )
-        # Ưu tiên st.html để Streamlit render HTML/SVG thật, không biến thành chữ <div>/<svg>.
-        # Nếu Streamlit version cũ chưa có .html thì fallback sang components.html.
-        # Không fallback sang st.markdown nữa vì một số bản Streamlit dễ hiện nguyên HTML thành text.
-        if hasattr(tree_slot, "html"):
-            tree_slot.html(tree_html)
-        else:
-            with tree_slot.container():
-                components.html(
-                    tree_html,
-                    height=int(st.session_state.tree_height) + 40,
-                    scrolling=True,
-                )
+
+        # CÁCH HIỂN THỊ ỔN ĐỊNH NHẤT TRÊN STREAMLIT CLOUD:
+        # Dùng st.graphviz_chart thay vì tự nhúng HTML/SVG.
+        # Như vậy sẽ không còn lỗi hiện chữ <div>/<svg> hoặc khung trắng không có cây.
+        with tree_slot.container():
+            st.graphviz_chart(tree_source, use_container_width=True)
 
     if update_log:
         with log_slot.container():
@@ -907,7 +896,7 @@ with col_left:
             "Hiện cây mọc dần khi A* quét",
             value=bool(st.session_state.show_scan_tree),
         )
-        st.caption("✅ Bản này đã chống nhấp nháy bằng cách vẽ cây trực tiếp, không reload iframe.")
+        st.caption("✅ Cây được hiển thị bằng st.graphviz_chart để ổn định trên Streamlit Cloud.")
 
     controls_slot = st.container()
 
