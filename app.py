@@ -2,7 +2,6 @@ import streamlit as st
 import streamlit.components.v1 as components
 import heapq
 import time
-
 # --- 1. CẤU HÌNH GIAO DIỆN ĐẦU FILE ---
 st.set_page_config(page_title="Hệ Thống AGV Bãi Đỗ", layout="centered")
 
