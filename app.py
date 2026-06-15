@@ -25,8 +25,8 @@ GRID = [
     [0, 1, 1, 1, 1, 0]
 ]
 
-START_POS = (0, 0, 2)  # Ô (0,0), Hướng Nam
-GOAL_POS = (5, 5)      # Ô (5,5)
+START_POS = (0, 0, 2)  # Tọa độ ô (0,0), Hướng Nam
+GOAL_POS = (5, 5)      # Đích ô (5,5)
 
 COST_FORWARD = 1
 COST_TURN = 2
@@ -38,28 +38,12 @@ DIR_ARROWS = ["🔼", "▶️", "🔽", "◀️"]
 DIR_ROTATION = {0: 0, 1: 90, 2: 180, 3: 270}
 
 
-# --- 3. KHỞI TẠO BỘ NHỚ TRẠNG THÁI (SESSION STATE) ---
-if "run_mode" not in st.session_state:
-    st.session_state.run_mode = "THỦ CÔNG"
-
-if "manual_history" not in st.session_state:
-    start_id = "0-0-2-0"
-    st.session_state.manual_history = [(0, 0, 2, 0, start_id, None)]
-    st.session_state.manual_car = (0, 0, 2)
-    st.session_state.manual_cost = 0
-    st.session_state.manual_explored = set([(0, 0)])
-
-if "snapshots" not in st.session_state:
-    st.session_state.snapshots = []
-    st.session_state.step_index = 0
-    st.session_state.final_path = []
-
-
-# --- 4. THUẬT TOÁN A* TỰ ĐỘNG: TRÍCH XUẤT CÂY RÚT GỌN THẲNG HÀNG ---
+# --- 3. THUẬT TOÁN A* TỰ ĐỘNG TÌM ĐƯỜNG ---
 def heuristic(r, c, g_r, g_c):
     return (abs(r - g_r) + abs(c - g_c)) * COST_FORWARD
 
-def generate_search_snapshots():
+@st.cache_data(show_spinner=False)
+def generate_all_snapshots():
     start_r, start_c, start_d = START_POS
     r_goal, c_goal = GOAL_POS
     start_node_id = f"{start_r}-{start_c}-{start_d}"
@@ -81,16 +65,16 @@ def generate_search_snapshots():
         current_node_id = f"{r}-{c}-{d}"
         explored_cells_acc.add((r, c))
         
-        # ĐỊNH DẠNG CÂY RÚT GỌN NHỎ GỌN (Khóa cứng kích thước để không bị bung to)
-        dot = graphviz.Digraph(comment='Compact Path Tree')
-        dot.attr(rankdir='TB', size='3.5,6!', fixedsize='true', bgcolor='transparent')
+        # CẤU HÌNH CÂY RÚT GỌN SIÊU NHỎ (Nhỏ hơn 2 lần, chống tràn khung)
+        dot = graphviz.Digraph(comment='Ultra Compact Tree')
+        dot.attr(rankdir='TB', size='1.8,4.5!', fixedsize='true', bgcolor='transparent')
         dot.attr('node', style='filled,rounded', shape='box', 
                  fillcolor='#1e252b', fontcolor='#ffffff', color='#34414c',
-                 fontname='Arial Bold', fontsize='11', penwidth='1.5', 
-                 width='0.9', height='0.35')
-        dot.attr('edge', color='#ffffff', arrowsize='0.5', penwidth='1.2')
+                 fontname='Arial Bold', fontsize='8', penwidth='1.0', 
+                 width='0.55', height='0.22')
+        dot.attr('edge', color='#ffffff', arrowsize='0.3', penwidth='0.8')
         
-        # Chỉ vẽ đường đi đáp án thẳng hàng
+        # Vẽ chuỗi nút đáp án thẳng đứng tinh gọn
         for idx, (pr, pc, pd) in enumerate(path):
             p_node_id = f"{pr}-{pc}-{pd}"
             if idx == 0:
@@ -117,7 +101,7 @@ def generate_search_snapshots():
         if (r, c) == GOAL_POS:
             return path, snapshots_list
 
-        # Phát triển tập con
+        # Phát triển các trạng thái tiếp theo
         dr, dc = DIRS[d]
         # Tiến
         nr, nc = r + dr, c + dc
@@ -127,38 +111,22 @@ def generate_search_snapshots():
         nr, nc = r - dr, c - dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
             heapq.heappush(pq, (g + COST_BACKWARD + heuristic(nr, nc, r_goal, c_goal), g + COST_BACKWARD, nr, nc, d, path + [(nr, nc, d)], current_node_id))
-        # Xoay
+        # Xoay hướng
         for next_d in [(d - 1) % 4, (d + 1) % 4]:
             heapq.heappush(pq, (g + COST_TURN + heuristic(r, c, r_goal, c_goal), g + COST_TURN, r, c, next_d, path + [(r, c, next_d)], current_node_id))
 
     return [], snapshots_list
 
 
-# --- 5. DỰNG CÂY ĐẦY ĐỦ CHO CHẾ ĐỘ THỦ CÔNG ---
-def build_full_manual_tree():
-    dot = graphviz.Digraph(comment='Full Manual Tree')
-    dot.attr(rankdir='TB', size='5,6!', fixedsize='true', bgcolor='transparent')
-    dot.attr('node', style='filled,rounded', shape='box', 
-             fillcolor='#1e252b', fontcolor='#ffffff', color='#4b5563',
-             fontname='Arial Bold', fontsize='10', penwidth='1.5',
-             width='0.8', height='0.33')
-    dot.attr('edge', color='#ffffff', arrowsize='0.5', penwidth='1.2')
-    
-    for i, (r, c, d, g, node_id, parent_id) in enumerate(st.session_state.manual_history):
-        if i == 0:
-            dot.node(node_id, label=f"({r},{c}) {DIR_ARROWS[d]}", fillcolor='#2ed573', fontcolor='#ffffff', color='#26af5f')
-        elif (r, c, d) == st.session_state.manual_car:
-            dot.node(node_id, label=f"({r},{c}) {DIR_ARROWS[d]}", fillcolor='#1e90ff', fontcolor='#ffffff', color='#0984e3')
-        else:
-            dot.node(node_id, label=f"({r},{c}) {DIR_ARROWS[d]}")
-            
-        if parent_id:
-            dot.edge(parent_id, node_id)
-            
-    return dot.source
+# --- 4. KHỞI TẠO LUỒNG TỰ ĐỘNG ---
+if "auto_step" not in st.session_state:
+    st.session_state.auto_step = 0
+
+final_path, all_snaps = generate_all_snapshots()
+total_steps = len(all_snaps)
 
 
-# --- 6. RENDER KHUNG BẢN ĐỒ HTML ---
+# --- 5. RENDER KHUNG BẢN ĐỒ HTML ---
 def render_grid_dynamic(explored, car_pos, final_path_cells):
     car_r, car_c, car_d = car_pos
     html = """
@@ -206,130 +174,43 @@ def render_grid_dynamic(explored, car_pos, final_path_cells):
     return html
 
 
-# --- 7. GIAO DIỆN ĐIỀU KHIỂN CHÍNH ---
-st.title("🖥️ HỆ THỐNG MÔ PHỎNG & ĐỊNH TUYẾN XE AGV")
-
-mode_select = st.selectbox("🎯 CHỌN CHẾ ĐỘ HOẠT ĐỘNG:", ["THỦ CÔNG", "TỰ ĐỘNG"])
-
-if mode_select != st.session_state.run_mode:
-    st.session_state.run_mode = mode_select
-    if mode_select == "TỰ ĐỘNG" and not st.session_state.snapshots:
-        path, snapshots = generate_search_snapshots()
-        st.session_state.snapshots = snapshots
-        st.session_state.final_path = path
-        st.session_state.step_index = 0
-    rerun_page()
-
+# --- 6. GIAO DIỆN CHÍNH ---
+st.title("🖥️ HỆ THỐNG MÔ PHỎNG & ĐỊNH TUYẾN TỰ ĐỘNG XE AGV")
 st.markdown("---")
 
-col_left, col_right = st.columns([5, 5], gap="large")
+# Lấy dữ liệu snapshot hiện tại theo bộ đếm tự động
+snap_now = all_snaps[st.session_state.auto_step]
+explored_now = snap_now["explored"]
+car_now = snap_now["car"]
+cost_now = snap_now["cost"]
+tree_dot_now = snap_now["tree"]
 
-if st.session_state.run_mode == "TỰ ĐỘNG" and st.session_state.snapshots:
-    current_snap = st.session_state.snapshots[st.session_state.step_index]
-    explored_now = current_snap["explored"]
-    car_now = current_snap["car"]
-    cost_now = current_snap["cost"]
-    tree_dot_now = current_snap["tree"]
-    
-    is_last = (st.session_state.step_index == len(st.session_state.snapshots) - 1)
-    path_cells_now = set((n[0], n[1]) for n in st.session_state.final_path) if is_last else set()
-else:
-    explored_now = st.session_state.manual_explored
-    car_now = st.session_state.manual_car
-    cost_now = st.session_state.manual_cost
-    path_cells_now = set()
-    tree_dot_now = build_full_manual_tree()
+is_last_step = (st.session_state.auto_step == total_steps - 1)
+path_cells_now = set((n[0], n[1]) for n in final_path) if is_last_step else set()
+
+col_left, col_right = st.columns([5, 5], gap="large")
 
 with col_left:
     st.markdown("### 🗺️ Sa Bàn Lưới")
     components.html(render_grid_dynamic(explored_now, car_now, path_cells_now), height=370, scrolling=False)
     
-    st.info(f"• **Vị trí xe:** Ô `({car_now[0]}, {car_now[1]})` — Hướng: **{DIR_NAMES[car_now[2]]}** |  **Chi phí g(n):** `{cost_now}`")
-    
-    # --- CỤM ĐIỀU KHIỂN THỦ CÔNG ---
-    if st.session_state.run_mode == "THỦ CÔNG":
-        st.markdown("🕹️ **Điều Khiển Thủ Công:**")
-        parent_node_id = f"{car_now[0]}-{car_now[1]}-{car_now[2]}-{cost_now}"
-        
-        cx1, cx2 = st.columns(2)
-        if cx1.button("🔼 TIẾN (+1)", use_container_width=True):
-            dr, dc = DIRS[car_now[2]]
-            nr, nc = car_now[0] + dr, car_now[1] + dc
-            if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-                new_cost = cost_now + COST_FORWARD
-                new_id = f"{nr}-{nc}-{car_now[2]}-{new_cost}"
-                st.session_state.manual_history.append((nr, nc, car_now[2], new_cost, new_id, parent_node_id))
-                st.session_state.manual_car = (nr, nc, car_now[2])
-                st.session_state.manual_cost = new_cost
-                st.session_state.manual_explored.add((nr, nc))
-                rerun_page()
-                
-        if cx2.button("🔽 LÙI (+3)", use_container_width=True):
-            dr, dc = DIRS[car_now[2]]
-            nr, nc = car_now[0] - dr, car_now[1] - dc
-            if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
-                new_cost = cost_now + COST_BACKWARD
-                new_id = f"{nr}-{nc}-{car_now[2]}-{new_cost}"
-                st.session_state.manual_history.append((nr, nc, car_now[2], new_cost, new_id, parent_node_id))
-                st.session_state.manual_car = (nr, nc, car_now[2])
-                st.session_state.manual_cost = new_cost
-                st.session_state.manual_explored.add((nr, nc))
-                rerun_page()
-                
-        cx3, cx4 = st.columns(2)
-        if cx3.button("🔄 XOAY TRÁI (+2)", use_container_width=True):
-            new_d = (car_now[2] - 1) % 4
-            new_cost = cost_now + COST_TURN
-            new_id = f"{car_now[0]}-{car_now[1]}-{new_d}-{new_cost}"
-            st.session_state.manual_history.append((car_now[0], car_now[1], new_d, new_cost, new_id, parent_node_id))
-            st.session_state.manual_car = (car_now[0], car_now[1], new_d)
-            st.session_state.manual_cost = new_cost
-            rerun_page()
-            
-        if cx4.button("🔄 XOAY PHẢI (+2)", use_container_width=True):
-            new_d = (car_now[2] + 1) % 4
-            new_cost = cost_now + COST_TURN
-            new_id = f"{car_now[0]}-{car_now[1]}-{new_d}-{new_cost}"
-            st.session_state.manual_history.append((car_now[0], car_now[1], new_d, new_cost, new_id, parent_node_id))
-            st.session_state.manual_car = (car_now[0], car_now[1], new_d)
-            st.session_state.manual_cost = new_cost
-            rerun_page()
-
-    # --- ĐIỀU KHIỂN TỰ ĐỘNG ---
-    if st.session_state.run_mode == "TỰ ĐỘNG" and st.session_state.snapshots:
-        st.markdown("🤖 **Điều Khiển Tự Động:**")
-        total_steps = len(st.session_state.snapshots)
-        st.write(f"Bước: **{st.session_state.step_index + 1} / {total_steps}**")
-        
-        c1, c2, c3 = st.columns(3)
-        if c1.button("⬅️ LÙI", use_container_width=True):
-            if st.session_state.step_index > 0:
-                st.session_state.step_index -= 1
-                rerun_page()
-        if c2.button("TIẾP ➡️", use_container_width=True):
-            if st.session_state.step_index < total_steps - 1:
-                st.session_state.step_index += 1
-                rerun_page()
-        if c3.button("▶️ CHẠY AUTO", use_container_width=True):
-            for idx in range(st.session_state.step_index, total_steps):
-                st.session_state.step_index = idx
-                time.sleep(0.4)
-                rerun_page()
-
-    st.markdown("---")
-    if st.button("🔄 RESET MÔ PHỎNG", use_container_width=True):
-        st.session_state.snapshots = []
-        st.session_state.step_index = 0
-        st.session_state.final_path = []
-        start_id = "0-0-2-0"
-        st.session_state.manual_history = [(0, 0, 2, 0, start_id, None)]
-        st.session_state.manual_car = (0, 0, 2)
-        st.session_state.manual_cost = 0
-        st.session_state.manual_explored = set([(0, 0)])
-        rerun_page()
+    st.info(f"• **Vị trí:** Ô `({car_now[0]}, {car_now[1]})` — Hướng: **{DIR_NAMES[car_now[2]]}** | **Chi phí g(n):** `{cost_now}`")
+    st.caption(f"Tiến độ giải thuật: Bước {st.session_state.auto_step + 1} / {total_steps}")
 
 with col_right:
     st.markdown("### 🌳 Sơ Đồ Cây Trạng Thái")
     if tree_dot_now:
-        # BỎ TÍNH NĂNG TỰ ĐỘNG GIÃN NỞ KHÔNG KIỂM SOÁT
+        # Ép khóa cứng tỉ lệ để cây nhỏ nhắn vừa vặn với giao diện thuyết trình
         st.graphviz_chart(tree_dot_now, use_container_width=False)
+
+
+# --- 7. CƠ CHẾ CHẠY TỰ ĐỘNG REAL-TIME ---
+if st.session_state.auto_step < total_steps - 1:
+    time.sleep(0.5)  # Thời gian delay giữa mỗi bước đi để hội đồng chấm xem rõ
+    st.session_state.auto_step += 1
+    rerun_page()
+else:
+    # Khi chạy xong hoàn chỉnh, hiện nút reset phòng trường hợp muốn chạy lại từ đầu
+    if st.button("🔄 CHẠY LẠI MÔ PHỎNG", use_container_width=True):
+        st.session_state.auto_step = 0
+        rerun_page()
