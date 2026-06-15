@@ -55,7 +55,7 @@ if "snapshots" not in st.session_state:
     st.session_state.final_path = []
 
 
-# --- 4. THUẬT TOÁN A* TỰ ĐỘNG: TRÍCH XUẤT CÂY RÚT GỌN ---
+# --- 4. THUẬT TOÁN A* TỰ ĐỘNG: TRÍCH XUẤT CÂY RÚT GỌN THẲNG HÀNG ---
 def heuristic(r, c, g_r, g_c):
     return (abs(r - g_r) + abs(c - g_c)) * COST_FORWARD
 
@@ -81,15 +81,16 @@ def generate_search_snapshots():
         current_node_id = f"{r}-{c}-{d}"
         explored_cells_acc.add((r, c))
         
-        # Tạo cây định dạng RÚT GỌN CHUẨN SLIDE (Nhỏ nhắn, chữ gọn, không thông tin dư thừa)
+        # ĐỊNH DẠNG CÂY RÚT GỌN NHỎ GỌN (Khóa cứng kích thước để không bị bung to)
         dot = graphviz.Digraph(comment='Compact Path Tree')
-        dot.attr(rankdir='TB', ratio='fill', bgcolor='transparent')
+        dot.attr(rankdir='TB', size='3.5,6!', fixedsize='true', bgcolor='transparent')
         dot.attr('node', style='filled,rounded', shape='box', 
                  fillcolor='#1e252b', fontcolor='#ffffff', color='#34414c',
-                 fontname='Arial Bold', fontsize='12', penwidth='2.0', width='1.2', height='0.4')
-        dot.attr('edge', color='#ffffff', arrowsize='0.6', penwidth='1.5')
+                 fontname='Arial Bold', fontsize='11', penwidth='1.5', 
+                 width='0.9', height='0.35')
+        dot.attr('edge', color='#ffffff', arrowsize='0.5', penwidth='1.2')
         
-        # Chỉ vẽ các nút nằm trên chuỗi đáp án tính đến vị trí hiện tại
+        # Chỉ vẽ đường đi đáp án thẳng hàng
         for idx, (pr, pc, pd) in enumerate(path):
             p_node_id = f"{pr}-{pc}-{pd}"
             if idx == 0:
@@ -116,7 +117,7 @@ def generate_search_snapshots():
         if (r, c) == GOAL_POS:
             return path, snapshots_list
 
-        # Phát triển tập con kế tiếp
+        # Phát triển tập con
         dr, dc = DIRS[d]
         # Tiến
         nr, nc = r + dr, c + dc
@@ -126,7 +127,7 @@ def generate_search_snapshots():
         nr, nc = r - dr, c - dc
         if 0 <= nr < GRID_SIZE and 0 <= nc < GRID_SIZE and GRID[nr][nc] == 0:
             heapq.heappush(pq, (g + COST_BACKWARD + heuristic(nr, nc, r_goal, c_goal), g + COST_BACKWARD, nr, nc, d, path + [(nr, nc, d)], current_node_id))
-        # Xoay Hướng
+        # Xoay
         for next_d in [(d - 1) % 4, (d + 1) % 4]:
             heapq.heappush(pq, (g + COST_TURN + heuristic(r, c, r_goal, c_goal), g + COST_TURN, r, c, next_d, path + [(r, c, next_d)], current_node_id))
 
@@ -136,11 +137,12 @@ def generate_search_snapshots():
 # --- 5. DỰNG CÂY ĐẦY ĐỦ CHO CHẾ ĐỘ THỦ CÔNG ---
 def build_full_manual_tree():
     dot = graphviz.Digraph(comment='Full Manual Tree')
-    dot.attr(rankdir='TB', ratio='fill', bgcolor='transparent')
+    dot.attr(rankdir='TB', size='5,6!', fixedsize='true', bgcolor='transparent')
     dot.attr('node', style='filled,rounded', shape='box', 
-             fillcolor='#f1f2f6', fontcolor='#2d3436', color='#4b5563',
-             fontname='Arial Bold', fontsize='11', penwidth='1.8')
-    dot.attr('edge', color='#ffffff', arrowsize='0.7', penwidth='1.8')
+             fillcolor='#1e252b', fontcolor='#ffffff', color='#4b5563',
+             fontname='Arial Bold', fontsize='10', penwidth='1.5',
+             width='0.8', height='0.33')
+    dot.attr('edge', color='#ffffff', arrowsize='0.5', penwidth='1.2')
     
     for i, (r, c, d, g, node_id, parent_id) in enumerate(st.session_state.manual_history):
         if i == 0:
@@ -220,7 +222,7 @@ if mode_select != st.session_state.run_mode:
 
 st.markdown("---")
 
-col_left, col_right = st.columns([4, 6], gap="large")
+col_left, col_right = st.columns([5, 5], gap="large")
 
 if st.session_state.run_mode == "TỰ ĐỘNG" and st.session_state.snapshots:
     current_snap = st.session_state.snapshots[st.session_state.step_index]
@@ -242,10 +244,9 @@ with col_left:
     st.markdown("### 🗺️ Sa Bàn Lưới")
     components.html(render_grid_dynamic(explored_now, car_now, path_cells_now), height=370, scrolling=False)
     
-    st.info(f"• **Vị trí xe:** Ô `({car_now[0]}, {car_now[1]})` — Hướng: **{DIR_NAMES[car_now[2]]}**\n"
-            f"• **Chi phí g(n):** `{cost_now}`")
+    st.info(f"• **Vị trí xe:** Ô `({car_now[0]}, {car_now[1]})` — Hướng: **{DIR_NAMES[car_now[2]]}** |  **Chi phí g(n):** `{cost_now}`")
     
-    # --- CỤM 4 NÚT ĐIỀU KHIỂN THỦ CÔNG ĐẦY ĐỦ ---
+    # --- CỤM ĐIỀU KHIỂN THỦ CÔNG ---
     if st.session_state.run_mode == "THỦ CÔNG":
         st.markdown("🕹️ **Điều Khiển Thủ Công:**")
         parent_node_id = f"{car_now[0]}-{car_now[1]}-{car_now[2]}-{cost_now}"
@@ -294,7 +295,7 @@ with col_left:
             st.session_state.manual_cost = new_cost
             rerun_page()
 
-    # --- ĐIỀU KHIỂN TỰ ĐỘNG CHẠY TỪNG BƯỚC ---
+    # --- ĐIỀU KHIỂN TỰ ĐỘNG ---
     if st.session_state.run_mode == "TỰ ĐỘNG" and st.session_state.snapshots:
         st.markdown("🤖 **Điều Khiển Tự Động:**")
         total_steps = len(st.session_state.snapshots)
@@ -330,4 +331,5 @@ with col_left:
 with col_right:
     st.markdown("### 🌳 Sơ Đồ Cây Trạng Thái")
     if tree_dot_now:
-        st.graphviz_chart(tree_dot_now, use_container_width=True)
+        # BỎ TÍNH NĂNG TỰ ĐỘNG GIÃN NỞ KHÔNG KIỂM SOÁT
+        st.graphviz_chart(tree_dot_now, use_container_width=False)
