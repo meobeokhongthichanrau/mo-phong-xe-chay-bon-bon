@@ -570,63 +570,60 @@ def svg_from_graphviz(tree_source):
 def render_tree_html(tree_source, height=500, zoom=0.70):
     svg = svg_from_graphviz(tree_source)
 
-    # QUAN TRỌNG:
-    # st.markdown sẽ coi HTML bị thụt vào 4 dấu cách là code block.
-    # Vì vậy phải dùng textwrap.dedent().strip(), nếu không trang sẽ hiện nguyên chữ
-    # <div>, <svg> như lỗi Khoa vừa chụp.
-    return textwrap.dedent(f"""
-    <style>
-        .tree-box {{
-            height: {height}px;
-            overflow: auto;
-            background: #FFFFFF;
-            border: 4px solid #0F172A;
-            border-radius: 18px;
-            padding: 10px;
-            box-sizing: border-box;
-            box-shadow: 0 14px 35px rgba(15, 23, 42, 0.14);
-        }}
-        .tree-content {{
-            display: inline-block;
-            zoom: {zoom};
-            transform-origin: top left;
-        }}
-        .tree-content svg {{
-            max-width: none !important;
-            height: auto !important;
-            display: block;
-        }}
-        .legend {{
-            position: sticky;
-            top: 0;
-            z-index: 5;
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-            margin-bottom: 8px;
-            padding: 5px 0;
-            background: #FFFFFF;
-            font-size: 13px;
-            font-weight: 800;
-            color: #0F172A;
-        }}
-        .chip {{
-            border: 2px solid #CBD5E1;
-            border-radius: 999px;
-            padding: 4px 9px;
-            background: #F8FAFC;
-        }}
-    </style>
-    <div class="tree-box">
-        <div class="legend">
-            <span class="chip">🟦 Node hiện tại</span>
-            <span class="chip">🟨 Đường tối ưu</span>
-            <span class="chip">🟦 nhạt Node đã quét</span>
-            <span class="chip">🟥 Đích G</span>
-        </div>
-        <div class="tree-content">{svg}</div>
-    </div>
-    """).strip()
+    # FIX THẬT: không dùng triple-string bị thụt dòng.
+    # Markdown gặp dòng HTML thụt 4 dấu cách là nó biến thành code block,
+    # nên lần trước trang mới hiện nguyên <div>, <svg> ra màn hình.
+    return f"""<style>
+.tree-box {
+    height: {height}px;
+    overflow: auto;
+    background: #FFFFFF;
+    border: 4px solid #0F172A;
+    border-radius: 18px;
+    padding: 10px;
+    box-sizing: border-box;
+    box-shadow: 0 14px 35px rgba(15, 23, 42, 0.14);
+}
+.tree-content {
+    display: inline-block;
+    zoom: {zoom};
+    transform-origin: top left;
+}
+.tree-content svg {
+    max-width: none !important;
+    height: auto !important;
+    display: block;
+}
+.legend {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+    padding: 5px 0;
+    background: #FFFFFF;
+    font-size: 13px;
+    font-weight: 800;
+    color: #0F172A;
+}
+.chip {
+    border: 2px solid #CBD5E1;
+    border-radius: 999px;
+    padding: 4px 9px;
+    background: #F8FAFC;
+}
+</style>
+<div class="tree-box">
+<div class="legend">
+<span class="chip">🟦 Node hiện tại</span>
+<span class="chip">🟨 Đường tối ưu</span>
+<span class="chip">🟦 nhạt Node đã quét</span>
+<span class="chip">🟥 Đích G</span>
+</div>
+<div class="tree-content">{svg}</div>
+</div>""".strip()
 
 
 # ============================================================
