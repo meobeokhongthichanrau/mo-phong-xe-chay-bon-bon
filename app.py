@@ -1,6 +1,7 @@
 import heapq
 import itertools
 import time
+import textwrap
 
 import graphviz
 import streamlit as st
@@ -568,7 +569,12 @@ def svg_from_graphviz(tree_source):
 
 def render_tree_html(tree_source, height=500, zoom=0.70):
     svg = svg_from_graphviz(tree_source)
-    return f"""
+
+    # QUAN TRỌNG:
+    # st.markdown sẽ coi HTML bị thụt vào 4 dấu cách là code block.
+    # Vì vậy phải dùng textwrap.dedent().strip(), nếu không trang sẽ hiện nguyên chữ
+    # <div>, <svg> như lỗi Khoa vừa chụp.
+    return textwrap.dedent(f"""
     <style>
         .tree-box {{
             height: {height}px;
@@ -620,7 +626,7 @@ def render_tree_html(tree_source, height=500, zoom=0.70):
         </div>
         <div class="tree-content">{svg}</div>
     </div>
-    """
+    """).strip()
 
 
 # ============================================================
