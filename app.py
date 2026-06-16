@@ -123,7 +123,6 @@ def is_free_cell(r, c):
 
 
 def heuristic(r, c, goal_r, goal_c):
-    # Manhattan distance: ước lượng thấp nhất số bước còn lại.
     return (abs(r - goal_r) + abs(c - goal_c)) * COST_FORWARD
 
 
@@ -167,14 +166,12 @@ def ensure_defaults():
     if "move_delay" not in st.session_state:
         st.session_state.move_delay = 0.35
     if "tree_zoom" not in st.session_state:
-        # Mặc định gọn hơn để cây không chiếm quá nhiều màn hình.
-        st.session_state.tree_zoom = 0.70
+        st.session_state.tree_zoom = 0.65  # Mặc định nhỏ gọn hơn vừa mắt
     if "tree_height" not in st.session_state:
-        st.session_state.tree_height = 520
+        st.session_state.tree_height = 480
     if "show_scan_tree" not in st.session_state:
         st.session_state.show_scan_tree = True
     if "anti_flash_mode" not in st.session_state:
-        # Giữ biến này để tương thích session cũ, nhưng bản mới luôn cho cây chạy từng bước.
         st.session_state.anti_flash_mode = False
 
 
@@ -182,7 +179,7 @@ ensure_defaults()
 
 
 # ============================================================
-# 4. THUẬT TOÁN A* CÓ PHA QUÉT TRƯỚC KHI CHẠY
+# 4. THUẬT TOÁN A*
 # ============================================================
 def get_neighbors(r, c, d):
     dr, dc = DIRS[d]
@@ -192,20 +189,12 @@ def get_neighbors(r, c, d):
         ("Xoay trái", COST_TURN, r, c, (d - 1) % 4),
         ("Xoay phải", COST_TURN, r, c, (d + 1) % 4),
     ]
-
     for action, cost, nr, nc, nd in candidates:
         if action.startswith("Xoay") or is_free_cell(nr, nc):
             yield action, cost, nr, nc, nd
 
 
 def build_astar_plan_from_current():
-    """
-    A* chạy 1 lần để tính trước đường tối ưu.
-    Kết quả gồm:
-    - scan_frames: các bước thuật toán quét/mở rộng node
-    - path_steps: đường tối ưu để xe chạy từng bước
-    - tree_nodes/tree_edges: cây trạng thái của quá trình tìm kiếm
-    """
     start_r, start_c, start_d = st.session_state.car_pos
     start_g = st.session_state.current_cost
     goal_r, goal_c = GOAL_POS
@@ -214,28 +203,10 @@ def build_astar_plan_from_current():
 
     counter = itertools.count(1)
     pq = []
-    heapq.heappush(
-        pq,
-        (
-            start_g + heuristic(start_r, start_c, goal_r, goal_c),
-            start_g,
-            0,
-            start_state,
-        ),
-    )
+    heapq.heappush(pq, (start_g + heuristic(start_r, start_c, goal_r, goal_c), start_g, 0, start_state))
 
-    # discovered_cost lưu chi phí tốt nhất đã biết cho mỗi trạng thái.
     discovered_cost = {start_state: start_g}
-
-    # record dùng để truy ngược đường đi tối ưu.
-    record = {
-        start_state: {
-            "node_id": root_id,
-            "parent_state": None,
-            "action": "START",
-            "g": start_g,
-        }
-    }
+    record = {start_state: {"node_id": root_id, "parent_state": None, "action": "START", "g": start_g}}
 
     closed = set()
     new_nodes = []
@@ -260,20 +231,16 @@ def build_astar_plan_from_current():
         scanned_cells.add((r, c))
 
         if (r, c) == (goal_r, goal_c):
-            # FIX lỗi quan trọng: so sánh đúng tuple (r, c) với GOAL_POS.
             goal_state = state
-            scan_frames.append(
-                {
-                    "visible_count": len(new_nodes),
-                    "current_node_id": current_node_id,
-                    "scanned_node_ids": set(scanned_node_ids),
-                    "scanned_cells": set(scanned_cells),
-                    "message": f"Đã tìm thấy G tại ({r},{c}) với chi phí tối ưu g={g}.",
-                }
-            )
+            scan_frames.append({
+                "visible_count": len(new_nodes),
+                "current_node_id": current_node_id,
+                "scanned_node_ids": set(scanned_node_ids),
+                "scanned_cells": set(scanned_cells),
+                "message": f"Đã tìm thấy G tại ({r},{c}) với chi phí tối ưu g={g}.",
+            })
             break
 
-        # Mở rộng node hiện tại.
         for action, action_cost, nr, nc, nd in get_neighbors(r, c, d):
             next_state = (nr, nc, nd)
             next_g = g + action_cost
@@ -298,20 +265,17 @@ def build_astar_plan_from_current():
             next_f = next_g + heuristic(nr, nc, goal_r, goal_c)
             heapq.heappush(pq, (next_f, next_g, step_no, next_state))
 
-        scan_frames.append(
-            {
-                "visible_count": len(new_nodes),
-                "current_node_id": current_node_id,
-                "scanned_node_ids": set(scanned_node_ids),
-                "scanned_cells": set(scanned_cells),
-                "message": f"Đang quét node ({r},{c}) {DIR_ARROWS[d]} | g={g}.",
-            }
-        )
+        scan_frames.append({
+            "visible_count": len(new_nodes),
+            "current_node_id": current_node_id,
+            "scanned_node_ids": set(scanned_node_ids),
+            "scanned_cells": set(scanned_cells),
+            "message": f"Đang quét node ({r},{c}) {DIR_ARROWS[d]} | g={g}.",
+        })
 
     if goal_state is None:
         return None
 
-    # Truy ngược đường tối ưu từ G về S/current.
     path_states = []
     cur = goal_state
     while cur is not None and cur != start_state:
@@ -351,7 +315,6 @@ def build_astar_plan_from_current():
 # ============================================================
 def render_grid_html(explored, scanned, optimal, car_pos, is_done):
     car_r, car_c, car_d = car_pos
-
     html = """
     <style>
         .agv-grid-wrap {
@@ -434,7 +397,6 @@ def render_grid_html(explored, scanned, optimal, car_pos, is_done):
     </style>
     <div class="agv-grid-wrap"><table class="agv-grid">
     """
-
     for r in range(GRID_SIZE):
         html += "<tr>"
         for c in range(GRID_SIZE):
@@ -472,32 +434,31 @@ def render_grid_html(explored, scanned, optimal, car_pos, is_done):
                     </svg>
                 </div>
                 """
-
             html += f"<td class='{cls}'>{content}</td>"
         html += "</tr>"
-
     html += "</table></div>"
     return html
 
 
 # ============================================================
-# 6. RENDER SƠ ĐỒ CÂY
+# 6. RENDER SƠ ĐỒ CÂY (ĐÃ FIX PHÓNG TO)
 # ============================================================
 def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=None):
     scanned_ids = scanned_ids or set()
     path_ids = path_ids or set()
 
+    # LIÊN KẾT GIÁ TRỊ ZOOM TRỰC TIẾP VÀO GRAPHVIZ ĐỂ NÚT CÂY THU NHỎ LẠI TỰ NHIÊN
+    zoom_factor = st.session_state.get("tree_zoom", 0.65) * 1.4
+
     dot = graphviz.Digraph(engine="dot")
     dot.attr(
-        # Đổi về TB: cây đi từ trên xuống dưới; khi có nhiều nhánh thì tự bung ngang.
-        # Cách này tránh cảnh ấn thủ công vài bước là cây chạy một hàng dài sang phải.
         rankdir="TB",
         splines="ortho",
         bgcolor="#FFFFFF",
         margin="0.04",
         pad="0.04",
-        ranksep="0.32",
-        nodesep="0.22",
+        ranksep=str(0.32 * zoom_factor),
+        nodesep=str(0.22 * zoom_factor),
         concentrate="false",
     )
     dot.attr(
@@ -505,11 +466,11 @@ def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=N
         shape="box",
         style="filled,rounded",
         fontname="Arial Bold",
-        fontsize="10",
+        fontsize=str(int(10 * zoom_factor)),
         penwidth="1.55",
         margin="0.07,0.04",
-        width="0.88",
-        height="0.34",
+        width=str(0.88 * zoom_factor),
+        height=str(0.34 * zoom_factor),
         color="#334155",
         fillcolor="#FFFFFF",
         fontcolor="#0F172A",
@@ -518,9 +479,9 @@ def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=N
         "edge",
         color="#334155",
         fontname="Arial Bold",
-        fontsize="8",
+        fontsize=str(int(8 * zoom_factor)),
         fontcolor="#0F172A",
-        arrowsize="0.52",
+        arrowsize=str(0.52 * zoom_factor),
         penwidth="1.25",
     )
 
@@ -532,11 +493,7 @@ def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=N
         action = node.get("action", "")
         label = f"{ACTION_ICON.get(action, action)}\n({r},{c}) {DIR_ARROWS[d]} | g={g}"
 
-        style = {
-            "fillcolor": "#FFFFFF",
-            "fontcolor": "#0F172A",
-            "color": "#334155",
-        }
+        style = {"fillcolor": "#FFFFFF", "fontcolor": "#0F172A", "color": "#334155"}
 
         if node_id == "root-start":
             style = {"fillcolor": "#22C55E", "fontcolor": "#052E16", "color": "#15803D"}
@@ -556,80 +513,6 @@ def draw_tree_source(nodes, edges, current_id=None, scanned_ids=None, path_ids=N
             dot.edge(edge["src"], edge["dst"], label=edge.get("label", ""))
 
     return dot.source
-
-
-def svg_from_graphviz(tree_source):
-    svg = graphviz.Source(tree_source).pipe(format="svg").decode("utf-8")
-    # Bỏ XML/DOCTYPE để nhúng trực tiếp bằng st.markdown, tránh iframe reload gây flash.
-    svg_start = svg.find("<svg")
-    if svg_start != -1:
-        svg = svg[svg_start:]
-    return svg
-
-
-def render_tree_html(tree_source, height=500, zoom=0.70):
-    svg = svg_from_graphviz(tree_source)
-
-    # FIX TRIỆT ĐỂ:
-    # Không dùng f-string cho CSS vì dấu { } trong CSS sẽ làm Python hiểu nhầm
-    # thành format placeholder và gây ValueError ở .tree-box.
-    # Dùng % formatting để dấu { } của CSS giữ nguyên 100%.
-    style_html = """<style>
-.tree-box {
-    height: %dpx;
-    overflow: auto;
-    background: #FFFFFF;
-    border: 4px solid #0F172A;
-    border-radius: 18px;
-    padding: 10px;
-    box-sizing: border-box;
-    box-shadow: 0 14px 35px rgba(15, 23, 42, 0.14);
-}
-.tree-content {
-    display: inline-block;
-    zoom: %.2f;
-    transform-origin: top left;
-}
-.tree-content svg {
-    max-width: none !important;
-    height: auto !important;
-    display: block;
-}
-.legend {
-    position: sticky;
-    top: 0;
-    z-index: 5;
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-    margin-bottom: 8px;
-    padding: 5px 0;
-    background: #FFFFFF;
-    font-size: 13px;
-    font-weight: 800;
-    color: #0F172A;
-}
-.chip {
-    border: 2px solid #CBD5E1;
-    border-radius: 999px;
-    padding: 4px 9px;
-    background: #F8FAFC;
-}
-</style>""" % (int(height), float(zoom))
-
-    return (
-        style_html
-        + '<div class="tree-box">'
-        + '<div class="legend">'
-        + '<span class="chip">🟦 Node hiện tại</span>'
-        + '<span class="chip">🟨 Đường tối ưu</span>'
-        + '<span class="chip">🟦 nhạt Node đã quét</span>'
-        + '<span class="chip">🟥 Đích G</span>'
-        + '</div>'
-        + '<div class="tree-content">'
-        + svg
-        + '</div></div>'
-    )
 
 
 # ============================================================
@@ -673,8 +556,6 @@ def render_scene(
 
     is_done = (car_pos[0], car_pos[1]) == GOAL_POS
 
-    # Không gọi .empty() trước mỗi lần cập nhật nữa.
-    # Bản cũ xóa khung rồi dựng lại liên tục nên nhìn giống flash/chớp trắng.
     if update_grid:
         grid_slot.markdown(
             render_grid_html(explored_cells, scanned_cells, optimal_cells, car_pos, is_done),
@@ -691,12 +572,49 @@ def render_scene(
 
     if update_tree:
         tree_source = draw_tree_source(tree_nodes, tree_edges, current_tree_id, scanned_node_ids, path_node_ids)
+        height = st.session_state.get("tree_height", 480)
 
-        # CÁCH HIỂN THỊ ỔN ĐỊNH NHẤT TRÊN STREAMLIT CLOUD:
-        # Dùng st.graphviz_chart thay vì tự nhúng HTML/SVG.
-        # Như vậy sẽ không còn lỗi hiện chữ <div>/<svg> hoặc khung trắng không có cây.
+        # TIÊM CSS ĐỂ KHỐNG CHẾ CHIỀU CAO VÀ NGĂN BLOCK GRAPHVIZ BỊ PHÓNG TO QUÁ ĐÀ
+        st.markdown(
+            f"""
+            <style>
+                [data-testid="stGraphvizChart"] {{
+                    height: {height}px !important;
+                    max-height: {height}px !important;
+                    overflow: auto !important;
+                    background: #FFFFFF !important;
+                    border: 4px solid #0F172A !important;
+                    border-radius: 18px !important;
+                    padding: 15px !important;
+                    box-shadow: 0 14px 35px rgba(15, 23, 42, 0.14) !important;
+                }}
+                [data-testid="stGraphvizChart"] svg {{
+                    width: auto !important;
+                    height: auto !important;
+                    margin: 0 auto;
+                    display: block;
+                }}
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
+
         with tree_slot.container():
-            st.graphviz_chart(tree_source, use_container_width=True)
+            # Thêm dòng chip Legend trực quan ngay phía trên cây
+            st.markdown(
+                """
+                <div style="display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; font-size: 13px; font-weight: 800; color: #0F172A;">
+                    <span style="border: 2px solid #CBD5E1; border-radius: 999px; padding: 4px 9px; background: #F8FAFC;">🟩 Gốc Start</span>
+                    <span style="border: 2px solid #CBD5E1; border-radius: 999px; padding: 4px 9px; background: #F8FAFC;">🟦 Node hiện tại</span>
+                    <span style="border: 2px solid #CBD5E1; border-radius: 999px; padding: 4px 9px; background: #F8FAFC;">🟨 Đường tối ưu</span>
+                    <span style="border: 2px solid #CBD5E1; border-radius: 999px; padding: 4px 9px; background: #F8FAFC;">🔹 Node đã quét</span>
+                    <span style="border: 2px solid #CBD5E1; border-radius: 999px; padding: 4px 9px; background: #F8FAFC;">🟥 Đích G</span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+            # CHUYỂN use_container_width SANG False ĐỂ TRÁNH BỊ GIÃN NODE CHỮ TO ĐÙNG
+            st.graphviz_chart(tree_source, use_container_width=False)
 
     if update_log:
         with log_slot.container():
@@ -732,7 +650,7 @@ def add_manual_step(r, c, d, new_cost, action):
 
 
 # ============================================================
-# 9. AUTO ANIMATION: QUÉT TRƯỚC, CHẠY SAU
+# 9. AUTO ANIMATION
 # ============================================================
 def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
     plan = build_astar_plan_from_current()
@@ -746,8 +664,6 @@ def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
     base_edges = list(st.session_state.tree_edges)
     base_explored = set(st.session_state.explored_cells)
 
-    # PHA 1: A* quét/mở rộng node trước. Xe chưa chạy.
-    # Bản mới vẫn cho cây mọc từng bước, nhưng nhúng SVG trực tiếp nên không còn flash trắng như iframe cũ.
     last_visible_count = 0
     for i, frame in enumerate(plan["scan_frames"], start=1):
         visible_count = frame["visible_count"] if st.session_state.show_scan_tree else last_visible_count
@@ -780,7 +696,6 @@ def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
         )
         time.sleep(float(st.session_state.scan_delay))
 
-    # PHA 2: Chốt đường tối ưu, tô vàng trước khi xe chạy.
     all_nodes = base_nodes + plan["new_nodes"]
     all_edges = base_edges + plan["new_edges"]
 
@@ -804,7 +719,6 @@ def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
     )
     time.sleep(0.75)
 
-    # PHA 3: Xe chạy từ từ theo path đã tính.
     move_explored = set(base_explored)
     current_node_id = st.session_state.current_tree_id
     for step_index, step in enumerate(plan["path_steps"], start=1):
@@ -832,7 +746,6 @@ def animate_auto(grid_slot, info_slot, tree_slot, log_slot):
         )
         time.sleep(float(st.session_state.move_delay))
 
-    # Lưu trạng thái cuối cùng.
     final_step = plan["path_steps"][-1]
     st.session_state.tree_nodes = all_nodes
     st.session_state.tree_edges = all_edges
@@ -880,14 +793,14 @@ with col_left:
         )
         st.session_state.tree_zoom = st.slider(
             "Thu nhỏ / phóng to sơ đồ cây",
-            min_value=0.45,
+            min_value=0.40,
             max_value=1.20,
             value=float(st.session_state.tree_zoom),
             step=0.05,
         )
         st.session_state.tree_height = st.slider(
             "Chiều cao khung cây",
-            min_value=360,
+            min_value=300,
             max_value=700,
             value=int(st.session_state.tree_height),
             step=20,
@@ -896,7 +809,7 @@ with col_left:
             "Hiện cây mọc dần khi A* quét",
             value=bool(st.session_state.show_scan_tree),
         )
-        st.caption("✅ Cây được hiển thị bằng st.graphviz_chart để ổn định trên Streamlit Cloud.")
+        st.caption("✅ Cây được hiển thị bằng st.graphviz_chart kết hợp tinh chỉnh kích thước vector.")
 
     controls_slot = st.container()
 
